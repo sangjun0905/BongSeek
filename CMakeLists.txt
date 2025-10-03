@@ -12,5 +12,5 @@ set(SRC_FILES
 add_executable(BongSeek ${SRC_FILES})
 
 target_include_directories(BongSeek PRIVATE
-    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/include
 )
