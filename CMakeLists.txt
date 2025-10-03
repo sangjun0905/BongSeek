@@ -6,11 +6,13 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(SRC_FILES
-    src/main.cpp    
+    src/tensor.cpp
+    src/main.cpp
 )
 
 add_executable(BongSeek ${SRC_FILES})
 
 target_include_directories(BongSeek PRIVATE
-    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/external/*
+    ${CMAKE_SOURCE_DIR}/include/*
 )
