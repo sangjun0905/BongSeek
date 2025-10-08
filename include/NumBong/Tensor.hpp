@@ -212,7 +212,7 @@ public:
         return Tensor(storage, base, offset, target, new_stride);
     }
 
-    Tensor sum_to(const std::array<std::size_t, Rank>& target) const {
+    Tensor sum_to(const std::array<std::size_t, Rank>& target) const {  
         for (std::size_t i = 0; i < Rank; ++i) {
             if (target[i] == shape[i]) continue;
             assert(target[i] == 1 && "sum_to error: can only reduce to size 1 along differing axes");
