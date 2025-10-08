@@ -89,6 +89,7 @@ public:
 
 // --- 추론 전용 Function 구현 ---
 
+
 class Add : public Function {
 public:
     std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
