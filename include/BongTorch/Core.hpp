@@ -1,5 +1,4 @@
-#ifndef CORE_HPP
-#define CORE_HPP
+#pragma once
 
 #include <algorithm>
 #include <array>
@@ -9,8 +8,9 @@
 #include <set>
 #include <string>
 #include <vector>
-#include "../NumBong.hpp"
 #include "../NumBong/Tensor.hpp"
+
+namespace bs {
 
 using TensorValueType = float;
 constexpr std::size_t TensorRank = 3;
@@ -34,6 +34,8 @@ private:
 
 inline UsingConfig no_grad() { return UsingConfig(Config::enable_backprop, false); }
 inline UsingConfig test_mode() { return UsingConfig(Config::train, false); }
+
+class Function; // Forward declaration
 
 class Variable : public std::enable_shared_from_this<Variable> {
 public:
@@ -199,12 +201,15 @@ public:
     }
 };
 
-// --- 추론 전용 Function 구현 ---
+// --- Basic Functions ---
 
 class Add : public Function {
 public:
     std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
         return { xs[0] + xs[1] };
+    }
+    std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
+        return { gys[0], gys[0] };
     }
 };
 
@@ -359,8 +364,8 @@ inline std::shared_ptr<Variable> operator^(const std::shared_ptr<Variable>& a, d
 }
 
 inline void demo() {
-    TensorData a(3, 3, 3);
-    TensorData b(3, 3, 3);
+    TensorData a({3, 3, 3});
+    TensorData b({3, 3, 3});
 
     auto A = Variable::create(a, "A");
     auto B = Variable::create(b, "B");
@@ -375,4 +380,4 @@ inline void demo() {
     }
 }
 
-#endif
+} // namespace bs
