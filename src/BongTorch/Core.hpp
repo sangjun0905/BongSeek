@@ -8,7 +8,7 @@
 #include <string>
 #include <functional>
 #include <iostream>
-#include <Numbong.hpp>
+//#include <Numbong.hpp>
 
 struct Config {
     static inline bool enable_backprop = true;
@@ -35,7 +35,7 @@ class Variable{
         std::shared_ptr<Variable> grad;
         std::shared_ptr<Function> creator;
         int generation = 0;
-
+ 
         Variable() = default;
         explicit Variable(const nb::Array& arr, const std::string& n = "");
 

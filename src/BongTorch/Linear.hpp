@@ -1,19 +1,15 @@
 #pragma once
 
-// #include "bongpy.hpp" °¡Á¤: nb::Array, nb::ones_like, nb::sum_to, nb::reshape, nb::transpose, nb::pow, nb::as_array
-// #include "Core.hpp"
-#include <memory> // ÀÓ½Ã·Î ¼±¾ğ
+#include "Core.hpp"
 
-class Linear : public Module {
-private:
-
+class Linear : public bs::Function {
 public:
-	std::shared_ptr<Parameter> W; // °¡ÁßÄ¡
-	std::shared_ptr<Parameter> b; // ÆíÇâ ÅÙ¼­
+	std::shared_ptr<Parameter> W; // ê°€ì¤‘ì¹˜
+	std::shared_ptr<Parameter> b; // í¸í–¥ í…ì„œ
 
 	Linear(int in_features, int out_features) {
-		W = Parameter::create(nb::rand({ in_features, out_features })); // bongpy¿¡ rand ÇÊ¿ä
-		b = Parameter::create(nb::zeros({ out_features })); // bongpy¿¡ zero ÇÊ¿ä
+		W = Parameter::create(nb::rand({ in_features, out_features })); // Numbongì—ì„œ rand
+		b = Parameter::create(nb::zeros({ out_features })); // Numbongì—ì„œ zero
 	}
 
 	std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) {
@@ -21,4 +17,4 @@ public:
 		auto y = add(y_matmul, b);
 		return y;
 	}
-}
+};
