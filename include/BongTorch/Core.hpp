@@ -15,8 +15,8 @@ namespace bs {
 using TensorValueType = float;
 constexpr std::size_t TensorRank = 3;
 using TensorData = nb::Tensor<TensorValueType, TensorRank>;
-using Shape = nb::Shape;
 using TensorShape = typename TensorData::shape_type;
+using Shape = std::vector<std::size_t>; // For compatibility with old code, but prefer TensorShape
 
 struct Config {
     static inline bool enable_backprop = true;
@@ -51,10 +51,10 @@ public:
         return std::make_shared<Variable>(arr, n);
     }
 
-    Shape shape() const { return data.shape_vector(); }
+    TensorShape shape() const { return data.getShape(); }
     int ndim() const { return static_cast<int>(data.ndim()); }
     size_t size() const { return data.size(); }
-    auto dtype() const { return data.dtype(); }
+    const char* dtype() const { return data.dtype(); }
 
     void set_creator(const std::shared_ptr<Function>& f);
     void unchain() { creator.reset(); }
@@ -246,7 +246,7 @@ public:
 };
 
 class Sub : public Function {
-    TensorShape x0_shape{}, x1_shape{};
+    TensorShape x0_shape, x1_shape;
 public:
     std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
         x0_shape = xs[0].getShape();
