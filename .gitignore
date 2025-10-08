@@ -1,1 +1,87 @@
-/build/
+# -------------------------------
+# Build directories
+# -------------------------------
+build/
+out/
+bin/
+lib/
+dist/
+Debug/
+Release/
+
+# -------------------------------
+# CMake generated files
+# -------------------------------
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CMakeScripts/
+Makefile
+install_manifest.txt
+compile_commands.json
+
+# -------------------------------
+# Compiled object / binary files
+# -------------------------------
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+*.app
+
+# -------------------------------
+# IDE / Editor files
+# -------------------------------
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# -------------------------------
+# OS generated files
+# -------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# -------------------------------
+# Logs / temporary
+# -------------------------------
+*.log
+*.tmp
+*.swp
+*.bak
+*.old
+
+# -------------------------------
+# Python virtualenv (if used)
+# -------------------------------
+.venv/
+__pycache__/
+
+# -------------------------------
+# Model weights & checkpoints
+# -------------------------------
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+*.onnx
+
+# -------------------------------
+# Tokenizer / data
+# -------------------------------
+*.model
+*.json
+*.txt
+data/
+datasets/
