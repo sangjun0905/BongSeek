@@ -25,11 +25,8 @@ void test_conv1d_layer() {
 
     auto output = conv_layer->forward(x);
 
-    // L_out = floor((L_in + 2*padding - kernel_size) / stride) + 1
-    // L_out = floor((10 + 2*1 - 3) / 1) + 1 = floor(9) + 1 = 10
     std::cout << "Output shape: (" << output->shape()[0] << ", " << output->shape()[1] << ", " << output->shape()[2] << ")" << std::endl;
     
-    // 예상 shape: (batch_size, out_channels, seq_length)
     std::cout << "Expected output shape: (" << batch_size << ", " << out_channels << ", " << seq_length << ")" << std::endl;
 
     std::cout << "Conv1DLayer test finished." << std::endl;
@@ -40,7 +37,6 @@ int main() {
     bs::demo();
     std::cout << "BongTorch Demo finished." << std::endl;
 
-    // Conv1DLayer 테스트 실행
     test_conv1d_layer();
 
     return 0;

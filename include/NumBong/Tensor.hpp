@@ -227,6 +227,26 @@ inline Tensor<float, 3> split(const Tensor<float, 3>& t, int a, int b) { return 
 inline Tensor<float, 3> concat(const std::vector<Tensor<float, 3>>& t, int axis) { return t[0]; } // Dummy
 inline Tensor<float, 3> array(const std::vector<float>& t) { return Tensor<float, 3>(); } // Dummy
 
+template<typename T>
+inline Tensor<T, 3> conv1d(const Tensor<T, 3>& input, const Tensor<T, 3>& weight, int stride, int padding, int groups) {
+    auto in_shape = input.getShape();
+    auto w_shape = weight.getShape();
+
+    size_t B = in_shape[0];
+    size_t C_in = in_shape[1];
+    size_t L_in = in_shape[2];
+
+    size_t C_out = w_shape[0];
+    size_t C_in_w = w_shape[1];
+    size_t K = w_shape[2];
+
+    // assert(C_in == C_in_w * groups);
+
+    size_t L_out = (L_in + 2 * padding - K) / stride + 1;
+
+    return Tensor<T, 3>(B, C_out, L_out);
+}
+
 template<std::size_t Rank>
 inline Tensor<float, Rank> randn(const std::array<std::size_t, Rank>& shape) {
     Tensor<float, Rank> t(shape);

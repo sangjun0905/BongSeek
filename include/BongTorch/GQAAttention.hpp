@@ -16,7 +16,7 @@ private:
     int num_heads_;
     int num_kv_heads_;
     int head_dim_;
-    int kv_repeats_;2
+    int kv_repeats_;
 
     std::shared_ptr<Linear> WQ_;
     std::shared_ptr<Linear> WK_;

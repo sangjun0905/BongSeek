@@ -16,11 +16,7 @@ public:
         : stride_(stride), padding_(padding), groups_(groups) {}
 
     std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
-        // nb::conv1d is not yet implemented in NumBong, so this will fail at link time if not implemented.
-        // For now, we assume it exists.
-        // return { nb::conv1d(xs[0], xs[1], stride_, padding_, groups_) };
-        // Placeholder until nb::conv1d is available
-        return { xs[0] }; // Return input as a placeholder
+        return { nb::conv1d(xs[0], xs[1], stride_, padding_, groups_) };
     }
 
     std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
