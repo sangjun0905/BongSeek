@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 #include <vector>
-
+#include "../NumBong.hpp"
 #include "../NumBong/Tensor.hpp"
 
 using TensorValueType = float;
@@ -34,8 +34,6 @@ private:
 
 inline UsingConfig no_grad() { return UsingConfig(Config::enable_backprop, false); }
 inline UsingConfig test_mode() { return UsingConfig(Config::train, false); }
-
-class Function;
 
 class Variable : public std::enable_shared_from_this<Variable> {
 public:
