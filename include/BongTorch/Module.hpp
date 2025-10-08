@@ -5,6 +5,7 @@
 #include <map>
 #include <vector>
 #include <memory>
+#include "../NumBong.hpp"
 
 class Module : public std::enable_shared_from_this<Module> {
 private:
