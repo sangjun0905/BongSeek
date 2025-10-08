@@ -9,7 +9,7 @@
 #include <set>
 #include <string>
 #include <vector>
-
+#include "../NumBong.hpp"
 #include "../NumBong/Tensor.hpp"
 
 using TensorValueType = float;
@@ -34,8 +34,6 @@ private:
 
 inline UsingConfig no_grad() { return UsingConfig(Config::enable_backprop, false); }
 inline UsingConfig test_mode() { return UsingConfig(Config::train, false); }
-
-class Function;
 
 class Variable : public std::enable_shared_from_this<Variable> {
 public:
@@ -201,24 +199,12 @@ public:
     }
 };
 
+// --- 추론 전용 Function 구현 ---
+
 class Add : public Function {
-    TensorShape x0_shape{}, x1_shape{};
 public:
     std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
-        x0_shape = xs[0].getShape();
-        x1_shape = xs[1].getShape();
         return { xs[0] + xs[1] };
-    }
-
-    std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
-        auto gy = gys[0];
-        auto gx0 = Variable::create(gy->data);
-        auto gx1 = Variable::create(gy->data);
-        if (!(x0_shape == x1_shape)) {
-            gx0->data = nb::sum_to(gx0->data, x0_shape);
-            gx1->data = nb::sum_to(gx1->data, x1_shape);
-        }
-        return { gx0, gx1 };
     }
 };
 
