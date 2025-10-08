@@ -1,62 +1,30 @@
 #pragma once
 
-namespace bs {
+#include "Core.hpp"
 
-    class Softmax : public Function {
-    private:
-        int axis_; // Softmax°¡ Àû¿ëµÉ Ãà (Attention¿¡¼­´Â º¸Åë ¸¶Áö¸· Ãà)
+class Softmax : public bs::Function {
+private:
+    int axis_;
+public:
+    explicit Softmax(int axis = -1) : axis_(axis) {}
 
-    public:
-        explicit Softmax(int axis = -1) : axis_(axis) {}
+    // forward
+    std::vector<nb::Array> forward(const std::vector<nb::Array>& xs) override {
+        const nb::Array& x = xs[0];
 
-        std::vector<nb::Array> forward(const std::vector<nb::Array>& xs) override {
-            const nb::Array& x = xs[0];
+        nb::Array x_max = nb::max(x, axis_, true);
+        nb::Array x_shifted = x - x_max; // ìµœëŒ“ê°’ ë¹¼ì£¼ê¸°
 
-            // 1. ¼öÄ¡ ¾ÈÁ¤È­: ÀÔ·Â¿¡¼­ ÃÖ´ë°ªÀ» »®´Ï´Ù.
-            // nb::max´Â axis¸¦ µû¶ó ÃÖ´ë°ªÀ» ±¸ÇÏ°í keepdims=true·Î ¼³Á¤ÇÑ´Ù°í °¡Á¤
-            nb::Array x_max = nb::max(x, axis_, true);
-            nb::Array y_shifted = x - x_max; // ºê·ÎµåÄ³½ºÆÃ »©±â
+        nb::Array numerator = nb::exp(x_shifted);
+        nb::Array denominator = nb::sum(numerator, axis_, true);
+        nb::Array y = numerator / denominator;
 
-            // 2. Áö¼ö ÇÔ¼ö (Numerator)
-            nb::Array numerator = nb::exp(y_shifted);
-
-            // 3. ºÐ¸ð ÇÕ»ê (Denominator)
-            // nb::sumÀº axis¸¦ µû¶ó ÇÕ»êÇÏ°í keepdims=true·Î ¼³Á¤ÇÑ´Ù°í °¡Á¤
-            nb::Array denominator = nb::sum(numerator, axis_, true);
-
-            // 4. ÃÖÁ¾ °á°ú
-            nb::Array y = numerator / denominator;
-
-            // backward¸¦ À§ÇØ Ãâ·ÂÀ» ÀúÀå (Softmax´Â Ãâ·ÂÀ» ÀçÈ°¿ëÇÕ´Ï´Ù)
-            retain_outputs_for_backward({ y });
-
-            return { y };
-        }
-
-        // B. Backward (¿ªÀüÆÄ) ±¸ÇöÀÇ ÇÙ½É: Chain Rule Àû¿ë
-        std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
-            // y´Â forwardÀÇ Ãâ·ÂÀ» ³ªÅ¸³»´Â VariableÀÔ´Ï´Ù.
-            auto y_ptr = get_retained_outputs()[0].lock(); // ÀúÀåµÈ Ãâ·Â y¸¦ °¡Á®¿É´Ï´Ù.
-            if (!y_ptr) return { nullptr }; // ¾ÈÀü¼º Ã¼Å©
-            auto y = y_ptr;
-            auto gy = gys[0]; // dL/dy
-
-            // 1. dL/dx = y * (gy - sum(gy * y))
-            // sum(gy * y) (Reduction)
-            auto sum_gy_y = sum(mul(gy, y), axis_, true); // bs::sum, bs::mul »ç¿ë °¡Á¤
-
-            // 2. gx = y * (gy - sum_gy_y)
-            auto gx = mul(y, sub(gy, sum_gy_y)); // bs::sub, bs::mul »ç¿ë °¡Á¤
-
-            return { gx };
-        }
+        return { y };
     };
+};
 
-    // Function Wrapper (bs::softmax)
-    inline std::shared_ptr<Variable> softmax(const std::shared_ptr<Variable>& x, int axis = -1) {
-        auto f = std::make_shared<Softmax>(axis);
-        auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x});
-        return outs[0];
-    }
-
+inline std::shared_ptr<Variable> softmax(const std::shared_ptr<Variable>& x, int axis = -1) {
+    auto f = std::make_shared<Softmax>(axis);
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x});
+    return outs[0];
 }
