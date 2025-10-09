@@ -63,7 +63,9 @@ public:
 inline std::shared_ptr<Variable> softmax(const std::shared_ptr<Variable>& x,
                                          int axis = -1) {
     auto f = std::make_shared<Softmax>(axis);
-    return (*f)(std::vector<std::shared_ptr<Variable>>{x});
+    // (*f) 오버로딩을 통해 Function 호출
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x});
+    return outs; 
 }
 
 } // namespace bs

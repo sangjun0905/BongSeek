@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
@@ -32,10 +33,11 @@ struct alignas(2) BFloat16 {
     }
 
     float to_float() const {
-        std::uint32_t full = static_cast<std::uint32_t>(bits) << 16;
-        float value{};
-        std::memcpy(&value, &full, sizeof(value));
-        return value;
+        return bits_to_float(bits);
+    }
+
+    static float to_float(storage_type raw) {
+        return bits_to_float(raw);
     }
 
     explicit operator float() const { return to_float(); }
@@ -77,6 +79,10 @@ struct alignas(2) BFloat16 {
         return BFloat16(lhs.to_float() / rhs.to_float());
     }
 
+    BFloat16 operator-() const {
+        return from_bits(static_cast<storage_type>(bits ^ 0x8000u));
+    }
+
     friend bool operator==(const BFloat16& lhs, const BFloat16& rhs) {
         return lhs.bits == rhs.bits;
     }
@@ -85,15 +91,74 @@ struct alignas(2) BFloat16 {
         return !(lhs == rhs);
     }
 
+    friend bool operator<(const BFloat16& lhs, const BFloat16& rhs) {
+        return lhs.to_float() < rhs.to_float();
+    }
+
+    friend bool operator<=(const BFloat16& lhs, const BFloat16& rhs) {
+        return lhs.to_float() <= rhs.to_float();
+    }
+
+    friend bool operator>(const BFloat16& lhs, const BFloat16& rhs) {
+        return lhs.to_float() > rhs.to_float();
+    }
+
+    friend bool operator>=(const BFloat16& lhs, const BFloat16& rhs) {
+        return lhs.to_float() >= rhs.to_float();
+    }
+
 private:
     void set_from_float(float value) {
+        bits = float_to_bits(value);
+    }
+
+    static storage_type float_to_bits(float value) {
         std::uint32_t full{};
-        std::memcpy(&full, &value, sizeof(value));
-        bits = static_cast<storage_type>(full >> 16);
+        std::memcpy(&full, &value, sizeof(full));
+
+        constexpr std::uint32_t exponent_mask = 0x7F800000u;
+        constexpr std::uint32_t mantissa_mask = 0x007FFFFFu;
+
+        const std::uint32_t exponent = full & exponent_mask;
+        const std::uint32_t mantissa = full & mantissa_mask;
+
+        if (exponent == exponent_mask) {
+            storage_type upper = static_cast<storage_type>(full >> 16);
+            if (mantissa != 0) {
+                // Quiet-NaN payload: ensure MSB of mantissa is set
+                upper |= static_cast<storage_type>(0x0040u);
+            }
+            return upper;
+        }
+
+        const std::uint32_t lsb = (full >> 16) & 1u;
+        const std::uint32_t rounding_bias = 0x00007FFFu + lsb;
+        full += rounding_bias;
+
+        return static_cast<storage_type>(full >> 16);
+    }
+
+    static float bits_to_float(storage_type raw) {
+        std::uint32_t full = static_cast<std::uint32_t>(raw) << 16;
+        float value{};
+        std::memcpy(&value, &full, sizeof(value));
+        return value;
     }
 };
 
 static_assert(sizeof(BFloat16) == 2, "BFloat16 must occupy 16 bits");
 static_assert(std::is_trivially_copyable_v<BFloat16>, "BFloat16 must be trivially copyable");
+
+inline BFloat16 bfloat16_sqrt(const BFloat16& value) {
+    return BFloat16(std::sqrt(static_cast<float>(value)));
+}
+
+inline BFloat16 bfloat16_rsqrt(const BFloat16& value) {
+    return BFloat16(1.0f / std::sqrt(static_cast<float>(value)));
+}
+
+inline BFloat16 bfloat16_exp(const BFloat16& value) {
+    return BFloat16(std::exp(static_cast<float>(value)));
+}
 
 } // namespace nb

@@ -46,6 +46,36 @@
     "charconv": "cpp",
     "compare": "cpp",
     "concepts": "cpp",
+<<<<<<< HEAD
+    "map": "cpp",
+    "set": "cpp",
+    "unordered_map": "cpp",
+    "exception": "cpp",
+    "functional": "cpp",
+    "iterator": "cpp",
+    "memory_resource": "cpp",
+    "numeric": "cpp",
+    "random": "cpp",
+    "system_error": "cpp",
+    "tuple": "cpp",
+    "type_traits": "cpp",
+    "utility": "cpp",
+    "format": "cpp",
+    "fstream": "cpp",
+    "numbers": "cpp",
+    "ostream": "cpp",
+    "ranges": "cpp",
+    "semaphore": "cpp",
+    "span": "cpp",
+    "sstream": "cpp",
+    "stop_token": "cpp",
+    "text_encoding": "cpp",
+    "thread": "cpp",
+    "cinttypes": "cpp",
+    "__node_handle": "cpp",
+    "__tree": "cpp",
+    "execution": "cpp"
+=======
     "exception": "cpp",
     "format": "cpp",
     "functional": "cpp",
@@ -75,7 +105,11 @@
     "xstring": "cpp",
     "xtr1common": "cpp",
     "xtree": "cpp",
-    "xutility": "cpp"
+    "xutility": "cpp",
+    "iomanip": "cpp",
+    "stop_token": "cpp",
+    "thread": "cpp"
+>>>>>>> origin/BongTorchJW
   },
   "C_Cpp_Runner.msvcBatchPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvarsall.bat"
 }

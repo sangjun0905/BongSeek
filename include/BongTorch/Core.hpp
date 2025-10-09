@@ -5,13 +5,31 @@
 #include <array>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
-#include <map>
-#include "../NumBong/Tensor.hpp"
-#include "../NumBong/BFloat16.hpp"
+#include "../NumBong/Tensor.hpp" 
+
+/*
+struct Metadatainfo {
+	size_t offset_start;
+	size_t offset_end;
+	nb::Shape shape;
+	std::string dtype;
+};*/
+
+struct TensorInfo {
+    std::string dtype;
+    std::vector<size_t> shape;
+    size_t offset_start;
+    size_t offset_end;
+};
+
+typedef TensorInfo Metadatainfo;
+
+using MetadataMap = std::unordered_map<std::string, TensorInfo>;
 
 using TensorValueType = nb::BFloat16;
 constexpr std::size_t TensorRank = 3;
@@ -59,41 +77,12 @@ public:
     virtual std::vector<Tensor> forward(const std::vector<Tensor>& xs) = 0;
 };
 
-class Module : public std::enable_shared_from_this<Module> {
-private:
-    std::map<std::string, std::shared_ptr<Parameter>> parameters;
-    std::map<std::string, std::shared_ptr<Module>> children;
-public:
-    virtual ~Module() = default;
-    virtual std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) = 0;
-    std::shared_ptr<Variable> operator()(const std::shared_ptr<Variable>& x) {
-        return this->forward(x);
-}
-    void register_parameter(const std::string& name, const std::shared_ptr<Parameter>& param) {
-        parameters[name] = param;
-    }
-    void add_module(const std::string& name, const std::shared_ptr<Module>& module) {
-        children[name] = module;
-    }
-    std::vector<std::shared_ptr<Parameter>> get_parameters() {
-        std::vector<std::shared_ptr<Parameter>> all_params;
-        for (const auto& pair : parameters) {
-            all_params.push_back(pair.second);
-            }
-        for (const auto& pair : children) {
-            auto child_params = pair.second->get_parameters();
-            all_params.insert(all_params.end(), child_params.begin(), child_params.end());
-        }
-        return all_params;
-    }
-};
-
 // --- 추론 전용 Function 구현 ---
 class Add : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        return { xs[0] + xs[1] };
-    }
+        return { xs[0].add( xs[1]) };
+    }    
 };
 
 class Mul : public Function {
@@ -111,7 +100,7 @@ public:
         const auto* src = input.data();
         auto* dst = output.data();
         for (size_t i = 0; i < input.size(); ++i) {
-            dst[i] = nb::BFloat16(-static_cast<float>(src[i]));
+            dst[i] = -src[i];
         }
         return { output };
     }
@@ -120,14 +109,15 @@ public:
 class Sub : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        return { xs[0] - xs[1] };
+        return { xs[0].sub(xs[1]) };
     }
 };
 
 class Div : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        return { xs[0] / xs[1] };
+        return { xs[0].div(xs[1]) };
+        
     }
 };
 
@@ -138,7 +128,7 @@ public:
 
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         return { nb::pow(xs[0], c) };
-    }
+    }                           //---> Function을 상속받으므로 Function의 forward오버라이딩 실제 nb::pow()연산 수행
 };
 
 // --- 연산자 오버로딩 (Operator Overloading) ---
@@ -154,6 +144,7 @@ inline std::shared_ptr<Variable> apply_op(const std::shared_ptr<Variable>& a, co
 inline std::shared_ptr<Variable> add(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
     return apply_op(a, b, std::make_shared<Add>());
 }
+
 
 inline std::shared_ptr<Variable> mul(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
     return apply_op(a, b, std::make_shared<Mul>());

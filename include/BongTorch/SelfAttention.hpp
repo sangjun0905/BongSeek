@@ -3,7 +3,6 @@
 #include "Core.hpp"
 #include "Softmax.hpp"
 #include "Linear.hpp"
-#include <cmath>      
 
 namespace bs {
 
@@ -13,13 +12,14 @@ private:
     std::shared_ptr<Linear> Q_proj, K_proj, V_proj; 
     std::shared_ptr<Linear> O_proj; 
 
-    double dk_root_; // 스케일링 상수 (1 / sqrt(d_k))
+    nb::BFloat16 scale_factor_; // 스케일링 상수 (1 / sqrt(d_k))
     int key_dim_;
 
 public:
     // key_dim은 d_k(헤드 차원)이며, input_dim은 임베딩 차원입니다.
     SelfAttentionLayer(int input_dim, int key_dim)
-        : key_dim_(key_dim), dk_root_(std::sqrt(static_cast<double>(key_dim)))
+        : key_dim_(key_dim),
+          scale_factor_(nb::BFloat16(1.0f) / nb::bfloat16_sqrt(nb::BFloat16(key_dim)))
     {
         // 1. Linear Projection 초기화: input_dim -> key_dim
         Q_proj = std::make_shared<Linear>(input_dim, key_dim);
@@ -52,15 +52,9 @@ public:
         auto K_T = Variable::create(K->data.transpose()); 
         
         // scores = Q @ K^T: (B, S, Dk) @ (B, Dk, S) = (B, S, S)
-        auto scores = matmul(Q, K_T); 
-
-        // 3. 스케일링: scores / sqrt(d_k)
-        // 스케일링 상수 (dk_root_의 역수)
-        double scale_factor = 1.0 / dk_root_;
-        
-        // Mul 연산자 오버로딩을 사용하여 스케일링 (스칼라와 Variable 곱셈)
-        // NOTE: core.hpp에 Variable과 스칼라의 연산이 구현되어 있다고 가정
-        auto scaled_scores = mul(scores, Variable::create(nb::array({(TensorValueType)scale_factor})));
+        auto scores = matmul(Q, K_T);
+        Tensor scaled_scores_tensor = scores->data * TensorValueType(scale_factor_);
+        auto scaled_scores = Variable::create(scaled_scores_tensor, "scaled_scores");
 
 
         // 4. Softmax 적용: Attention Weights

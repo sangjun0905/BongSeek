@@ -3,6 +3,7 @@
 #include "Core.hpp"
 #include "MatMul.hpp"
 #include <memory>
+#include "Module.hpp"
 
 namespace bs {
 
@@ -45,6 +46,13 @@ public:
 
     std::shared_ptr<Parameter> weight() const { return W; }
     std::shared_ptr<Parameter> bias() const { return b; }
+
+    void loadWeights(std::istream& file, const MetadataMap& metadata)
+    {
+        long long startoffset = metadata.at("weight").offset_start;
+        long long endoffset = metadata.at("weight").offset_end;
+        W->data.loadWeight(file, startoffset, endoffset);
+    }
 };
 
 } // namespace bs

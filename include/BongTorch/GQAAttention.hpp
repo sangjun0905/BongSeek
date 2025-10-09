@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include <cmath>
@@ -9,6 +9,7 @@
 #include "Core.hpp"
 #include "Linear.hpp"
 #include "RMSNorm.hpp"
+#include "Module.hpp"
 
 namespace bs {
 

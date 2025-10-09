@@ -2,9 +2,35 @@
 
 project(BongSeek LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+find_package(Threads REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
 
+<<<<<<< HEAD
 add_executable(BongSeek src/main.cpp)
 target_include_directories(BongSeek PRIVATE ${CMAKE_SOURCE_DIR}/include)
+=======
+add_library(NumBong INTERFACE)
+target_include_directories(NumBong INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_compile_features(NumBong INTERFACE cxx_std_20)
+target_link_libraries(NumBong INTERFACE Threads::Threads)
+
+add_library(BongTorch INTERFACE)
+target_include_directories(BongTorch INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(BongTorch INTERFACE NumBong)
+
+add_library(bongseek INTERFACE)
+target_include_directories(bongseek INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+
+set(BONGSEEK_SOURCES
+    src/main.cpp    
+    src/BongSeek/ModelConfig.cpp
+    src/BongSeek/Tokenizer.cpp
+    src/BongSeek/WeightLoader.cpp
+    src/BongSeek/Model.cpp
+)
+
+
+add_executable(BongSeek ${BONGSEEK_SOURCES})
+target_link_libraries(BongSeek PRIVATE BongTorch nlohmann_json::nlohmann_json)
+>>>>>>> 5436e6a1e624c5f6ac700af8b7d32c5a86b18715

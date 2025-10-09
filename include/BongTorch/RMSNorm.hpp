@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "Core.hpp"
+#include "Module.hpp"
 
 namespace bs {
 

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 ﻿// src/main.cpp
 #include <iostream>
 #include <iomanip>
@@ -18,6 +19,16 @@ static void fill_tensor(Tensor& tensor, float start, float step) {
         value += step;
     }
 }
+=======
+#include "bongseek/Model.hpp"
+#include <iostream>
+#include <fstream>
+#include <string>
+#include "bongseek/WeightLoader.hpp"
+#include "bongseek/Config.hpp"
+
+using namespace std;
+>>>>>>> 5436e6a1e624c5f6ac700af8b7d32c5a86b18715
 
 static void print_slice(const Tensor& tensor,
                         std::size_t b,
@@ -33,6 +44,7 @@ static void print_slice(const Tensor& tensor,
 }
 
 int main() {
+<<<<<<< HEAD
     const std::size_t batch        = 1;
     const std::size_t seq          = 4;
     const std::size_t head_dim     = 8;
@@ -64,7 +76,34 @@ int main() {
     std::cout << "\nOutput slice (batch 0, token 0, first 8 dims):\n";
     print_slice(output->data, 0, 0,
                 std::min<std::size_t>(8, output->data.getShape()[2]));
+=======
+    
+    WeightLoader loader;
+
+    string filename ="../model/model.safetensors";
+    cout << "test1 "<<endl;
+    ifstream file(filename, std::ios::binary);
+    cout << "test2 "<<endl;
+    loader.load(filename);
+    cout << "test3 "<<endl;
+    
+    MetadataMap metadata;
+
+    metadata = loader.get_tensor_map();
+
+    cout << "test4 "<<endl;
+    Config config;
+    Model model(config);
+
+    model.load_weights(file, metadata);
+    cout << "test5 "<<endl;
+    
+>>>>>>> 5436e6a1e624c5f6ac700af8b7d32c5a86b18715
 
     std::cout << "\nGQAAttention demo finished.\n";
     return 0;
 }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 5436e6a1e624c5f6ac700af8b7d32c5a86b18715

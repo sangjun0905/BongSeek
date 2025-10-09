@@ -11,6 +11,7 @@ class Module : public std::enable_shared_from_this<Module> {
 private:
     // 모듈이 소유한 파라미터(가중치)를 이름으로 관리합니다.
     std::map<std::string, std::shared_ptr<Parameter>> parameters;
+    //std::map<"파라미터명", tensor데이터 그자체> 저장할 리스트
 
     // 모듈이 소유한 하위 모듈을 이름으로 관리합니다.
     std::map<std::string, std::shared_ptr<Module>> children;
@@ -23,7 +24,7 @@ public:
 
     // 사용자 호출을 위한 Operator Overloading
     std::shared_ptr<Variable> operator()(const std::shared_ptr<Variable>& x) {
-        return forward(x);
+        return forward(x);//각각의 linear에 있는 forward를 호출
     }
 
     // Parameter 등록 (가중치 관리)

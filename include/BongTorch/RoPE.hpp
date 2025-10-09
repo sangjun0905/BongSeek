@@ -32,7 +32,10 @@ public:
         Tensor term2 = (x_B * C) + (x_A * S); 
         
         // 4. 결과 텐서 결합 (Concatenation)
-        Tensor y = nb::concat({ term1, term2 }, x.ndim() - 1); // 
+        std::vector<Tensor> input;
+        input.push_back(term1);
+        input.push_back(term2);
+        Tensor y = nb::concat(input, x.ndim() - 1); // 
 
         return { y };
     }
@@ -43,9 +46,7 @@ inline std::shared_ptr<Variable> rope(const std::shared_ptr<Variable>& x,
     const std::shared_ptr<Variable>& C,
     const std::shared_ptr<Variable>& S) {
     auto f = std::make_shared<RoPE>();
-    // (*f) 오버로딩을 통해 Function 호출
-    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x, C, S});
-    return outs[0];
+    return (*f)({x, C, S});
 }
 
 } // namespace bs

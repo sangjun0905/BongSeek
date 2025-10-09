@@ -1,14 +1,11 @@
+
 #pragma once
 
 #include <algorithm>
 #include <array>
 #include <cassert>
-#include <cmath>
-#include <cstdint>
-#include <cstddef>
-#include <initializer_list>
-#include <istream>
-#include <limits>
+#include <type_traits>
+#include <memory>
 #include <numeric>
 #include <thread>
 #include <sstream>

@@ -6,20 +6,26 @@
 
 namespace bs {
 
-class SiLU : public Function { // bs::Function에서 Function으로 수정
+class SiLU : public Function {
 public:
-    // forward: SiLU(x) = x * sigma(x) = x / (1 + exp(-x))
-    // xs[0] = x (입력 텐서)
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        const Tensor& x = xs[0]; //
+        const Tensor& x = xs[0];
 
-        // 1. exp(-x)
-        Tensor exp_neg_x = nb::exp(-x); // nb::exp 함수가 NumBong.hpp에 정의되어야 함
+        // 1. Manual negation of x
+        Tensor neg_x(x.getShape());
+        const auto* x_data = x.data();
+        auto* neg_x_data = neg_x.data();
+        for (size_t i = 0; i < x.size(); ++i) {
+            neg_x_data[i] = -x_data[i];
+        }
 
-        // 2. 분모 계산: 1 + exp(-x)
-        Tensor denominator = 1.0 + exp_neg_x;
+        // 2. exp(-x)
+        Tensor exp_neg_x = nb::exp(neg_x);
 
-        // 3. 최종 결과: x / denominator
+        // 3. Denominator: 1 + exp(-x)
+        Tensor denominator = exp_neg_x + TensorValueType(1.0f);
+
+        // 4. Final result: x / denominator
         Tensor y = x / denominator;
 
         return { y };
@@ -29,8 +35,7 @@ public:
 // Function Wrapper (bs::silu)
 inline std::shared_ptr<Variable> silu(const std::shared_ptr<Variable>& x) {
     auto f = std::make_shared<SiLU>();
-    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x});
-    return outs[0];
+    return (*f)({x});
 }
 
 } // namespace bs
