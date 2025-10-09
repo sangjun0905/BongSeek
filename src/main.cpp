@@ -1,6 +1,7 @@
 #include "bongseek/Model.hpp"
 #include <iostream>
 #include <fstream>
+#include <string>
 #include "bongseek/WeightLoader.hpp"
 #include "bongseek/Config.hpp"
 
@@ -11,17 +12,22 @@ int main() {
     WeightLoader loader;
 
     string filename ="../model/model.safetensors";
-
-    istream file(filename);
+    cout << "test1 "<<endl;
+    ifstream file(filename, std::ios::binary);
+    cout << "test2 "<<endl;
     loader.load(filename);
+    cout << "test3 "<<endl;
     
-    MetadataMap = loader.get_tensor_map();
+    MetadataMap metadata;
 
+    metadata = loader.get_tensor_map();
+
+    cout << "test4 "<<endl;
     Config config;
     Model model(config);
 
     model.load_weights(file, metadata);
-
+    cout << "test5 "<<endl;
     
 
     return 0;

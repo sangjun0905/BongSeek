@@ -12,20 +12,20 @@
 #include "../BongTorch/GQAAttention.hpp"
 #include "../BongTorch/RMSNorm.hpp"
 #include "../BongTorch/FFN_SWiGLU.hpp"
-#include "../BongTorch/Convld.hpp"
+#include "../BongTorch/Conv1d.hpp"
 #include "../BongTorch/Embedding.hpp"
 #include "../BongTorch/RoPE.hpp"
 
 using namespace std;
 
-typedef shared_ptr<Variable> datatype;
+typedef shared_ptr<bs::Variable> datatype;
 
 
 
 class Layer {
 public:
 	virtual ~Layer() = default;
-	virtual shared_ptr<Variable> forward(shared_ptr<Variable> x)
+	virtual shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x)
 	{
 		return x;
 	};
@@ -39,7 +39,7 @@ class ConvLayer : public Layer {
 
 	string name;
 	bs::RMSNorm operator_norm;
-	bs::ConvldLayer conv;
+	bs::Conv1d conv;
 	bs::RMSNorm ffn_norm;
 	bs::FFN_SWiGLU feed_forward;
 public:
@@ -48,13 +48,13 @@ public:
 		int intermediate_size)
 	{
 		operator_norm = bs::RMSNorm(hidden_size);
-		conv = bs::ConvldLayer(hidden_size, hidden_size, 3);  //나중에 한번 더 재확인
+		conv = bs::Conv1d(hidden_size, hidden_size, 3, 6144, 2048);  //나중에 한번 더 재확인
 		ffn_norm = bs::RMSNorm(hidden_size);
 		feed_forward = bs::FFN_SWiGLU(hidden_size, intermediate_size);
 	}
 
-	shared_ptr<Variable> forward(shared_ptr<Variable> x) override {
-		shared_ptr<Variable> residual = x;
+	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
+		shared_ptr<bs::Variable> residual = x;
 		x = operator_norm.forward(x);
 		x = conv.forward(x);
 		x = add(residual, x);
@@ -119,8 +119,8 @@ public:
 		feed_forward = bs::FFN_SWiGLU(hidden_size, intermediate_size);
 	}
 
-	shared_ptr<Variable> forward(shared_ptr<Variable> x) override {
-		shared_ptr<Variable> residual = x;
+	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
+		shared_ptr<bs::Variable> residual = x;
 		x = operator_norm.forward(x);
 		x = self_attn.forward(x);
 		x = add(residual, x);
@@ -186,7 +186,7 @@ public:
 			if (type == "conv")
 			{
 				layers.push_back(make_unique<ConvLayer>(config.hidden_size,
-					config.intermediate_size, config.norm_eps));
+					config.intermediate_size));
 			}
 			else if (type == "full_attention")
 			{
@@ -198,16 +198,16 @@ public:
 	}
 
 	/*
-	shared_ptr<Variable> forward(shared_ptr<Variable> x) 
+	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) 
 	{
 		
-		shared_ptr<Variable> embed = embedding.forward(x);
+		shared_ptr<bs::Variable> embed = embedding.forward(x);
 
 		//embedding norm(2048) -> (batch, token, 2048)			W(2048)
 		embed = embednorm.forward(embed);
 
 		//positional encoding -> (batch, token, 2048)			
-		shared_ptr<Variable> current = pe.forward(embed);
+		shared_ptr<bs::Variable> current = pe.forward(embed);
 
 		//layers (batch, token, 2048)
 		for (auto& layer : layers) {

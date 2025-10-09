@@ -12,6 +12,8 @@ private:
     std::shared_ptr<Linear> down_linear; 
 
 public:
+    FFN_SWiGLU() {};
+
     FFN_SWiGLU(int embed_dim, int hidden_dim) {
         gate_linear  = std::make_shared<Linear>(embed_dim, hidden_dim, false);
         value_linear = std::make_shared<Linear>(embed_dim, hidden_dim, false);

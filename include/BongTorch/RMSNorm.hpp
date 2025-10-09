@@ -1,21 +1,22 @@
 #pragma once
 
 #include "Core.hpp"
-#include <cmath> // For std::sqrt
 
 namespace bs {
 
 class RMSNorm : public Module {
 private:
     std::shared_ptr<Parameter> weight;
-    double epsilon_ = 1e-5;
+    nb::BFloat16 epsilon_{nb::BFloat16(1e-5f)};
     int dim_;
 
 public:
+    RMSNorm() {};
+
     RMSNorm(int dim) : dim_(dim) {
         TensorShape weight_shape = {1, 1, static_cast<size_t>(dim)};
         auto weight_tensor = Tensor(weight_shape);
-        weight_tensor.fill(nb::BFloat16(1.0f)); // Initialize with ones
+        weight_tensor.fill(TensorValueType(1.0f)); // Initialize with ones
         weight = Parameter::create(weight_tensor, "weight");
         register_parameter("weight", weight);
     }
@@ -33,24 +34,23 @@ public:
 
         Tensor output(x_shape);
 
+        const nb::BFloat16 dim_b(dim_);
+        const nb::BFloat16 one(1.0f);
+
         for (size_t b = 0; b < B; ++b) {
             for (size_t s = 0; s < S; ++s) {
-                // 1. Calculate mean of squares for the feature vector
-                float sum_sq = 0.0f;
+                nb::BFloat16 sum_sq(0.0f);
                 for (size_t d = 0; d < D; ++d) {
-                    float val = static_cast<float>(x(b, s, d));
+                    const nb::BFloat16 val = x(b, s, d);
                     sum_sq += val * val;
                 }
-                float mean_sq = sum_sq / D;
+                const nb::BFloat16 mean_sq = sum_sq / dim_b;
+                const nb::BFloat16 denom = nb::bfloat16_sqrt(mean_sq + epsilon_);
+                const nb::BFloat16 inv_rms = one / denom;
 
-                // 2. Calculate rsqrt(mean_sq + epsilon)
-                float rrms = 1.0f / std::sqrt(mean_sq + epsilon_);
-
-                // 3. Normalize and apply weight
                 for (size_t d = 0; d < D; ++d) {
-                    float normalized_val = static_cast<float>(x(b, s, d)) * rrms;
-                    float weighted_val = normalized_val * static_cast<float>(weight->data(0, 0, d));
-                    output(b, s, d) = nb::BFloat16(weighted_val);
+                    const nb::BFloat16 normalized_val = x(b, s, d) * inv_rms;
+                    output(b, s, d) = normalized_val * weight->data(0, 0, d);
                 }
             }
         }

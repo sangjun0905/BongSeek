@@ -1,34 +1,31 @@
-#include "WeightLoader.hpp"
+#include "bongseek/WeightLoader.hpp"
+#include <cstdint>
 #include <iostream>
-#include <cmath>
-#include <cstring>
+#include "NumBong/BFloat16.hpp"
 
 using json = nlohmann::json;
-
-// ---- BF16 -> float 변환 함수 ----
-inline float bf16_to_float(uint16_t val) {
-    uint32_t tmp = static_cast<uint32_t>(val) << 16;
-    float result;
-    std::memcpy(&result, &tmp, sizeof(float));
-    return result;
-}
+using namespace std;
 
 // ---- safetensors 헤더 읽기 ----
 bool WeightLoader::load(const std::string& path) {
+    
+    
     file_path = path;
+    cout << "test5 "<<endl;
     file.open(path, std::ios::binary);
     if (!file.is_open()) {
         std::cerr << "[WeightLoader] 파일 읽기 실패: " << path << std::endl;
         return false;
     }
-
+    cout << "test6 "<<endl;
     uint32_t header_len = 0;
     file.read(reinterpret_cast<char*>(&header_len), 4);
     std::string header_str(header_len, '\0');
     file.read(&header_str[0], header_len);
 
+    cout << "test7 "<<endl;
     json header = json::parse(header_str);
-
+    cout << "test8 "<<endl;
     for (auto& [name, meta] : header.items()) { // 텐서 헤더 항목 순회
         TensorInfo info;
         info.dtype = meta["dtype"].get<std::string>();
@@ -65,7 +62,7 @@ std::vector<float> WeightLoader::get(const std::string& tensor_name) {
         std::vector<uint16_t> tmp(count);
         file.read(reinterpret_cast<char*>(tmp.data()), bytes);
         for (size_t i = 0; i < count; ++i) {
-            data[i] = bf16_to_float(tmp[i]);
+            data[i] = nb::BFloat16::to_float(tmp[i]);
         }
     } else {
         std::cerr << "[WeightLoader] 지원되지 않는 dtype: " << info.dtype << std::endl;

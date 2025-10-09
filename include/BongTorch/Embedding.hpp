@@ -15,6 +15,8 @@ private:
     std::size_t dim_;
 
 public:
+    Embedding() {};
+
     Embedding(std::size_t vocab_size, std::size_t dim)
         : vocab_size_(vocab_size), dim_(dim) {
         
@@ -44,11 +46,11 @@ public:
 
         for (std::size_t b = 0; b < batch_size_; ++b) {
             for (std::size_t s = 0; s < seq_len_; ++s) {
-                float raw = static_cast<float>(indices(b, s, 0)); 
-                if (raw < 0.0f) {
+                const nb::BFloat16 idx_val = indices(b, s, 0);
+                if (idx_val < nb::BFloat16(0.0f)) {
                     throw std::runtime_error("Embedding index must be non-negative.");
                 }
-                std::size_t idx = static_cast<std::size_t>(raw);
+                const auto idx = static_cast<std::size_t>(idx_val.to_float());
                 if (idx >= vocab_size_) {
                     throw std::runtime_error("Embedding index out of range.");
                 }

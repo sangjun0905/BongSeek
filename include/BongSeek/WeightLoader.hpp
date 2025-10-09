@@ -4,13 +4,16 @@
 #include <vector>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include "../BongTorch/Core.hpp"
 
+
+/*
 struct TensorInfo {
     std::string dtype;
     std::vector<size_t> shape;
     size_t offset_start;
     size_t offset_end;
-};
+};*/
 
 class WeightLoader {
 private:

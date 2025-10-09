@@ -16,14 +16,14 @@ public:
         const auto* x_data = x.data();
         auto* neg_x_data = neg_x.data();
         for (size_t i = 0; i < x.size(); ++i) {
-            neg_x_data[i] = nb::BFloat16(-static_cast<float>(x_data[i]));
+            neg_x_data[i] = -x_data[i];
         }
 
         // 2. exp(-x)
         Tensor exp_neg_x = nb::exp(neg_x);
 
         // 3. Denominator: 1 + exp(-x)
-        Tensor denominator = 1.0 + exp_neg_x;
+        Tensor denominator = exp_neg_x + TensorValueType(1.0f);
 
         // 4. Final result: x / denominator
         Tensor y = x / denominator;

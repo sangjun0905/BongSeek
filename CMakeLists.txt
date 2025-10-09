@@ -19,14 +19,9 @@ target_include_directories(bongseek INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/includ
 
 
 set(BONGSEEK_SOURCES
-    src/main.cpp
-    src/BongSeek/AssetLocator.cpp
+    src/main.cpp    
     src/BongSeek/ModelConfig.cpp
-    src/BongSeek/ModelRuntime.cpp
     src/BongSeek/Tokenizer.cpp
-    src/BongSeek/TransformerModel.cpp
-    src/BongSeek/WeightLoader.cpp
-    src/BongSeek/LLM.cpp
     src/BongSeek/WeightLoader.cpp
     src/BongSeek/Model.cpp
 )

@@ -18,7 +18,7 @@ private:
     std::size_t num_kv_heads_;
     std::size_t head_dim_;
     std::size_t kv_repeats_;
-    float eps_ = 1e-6f;
+    nb::BFloat16 eps_{nb::BFloat16(1e-6f)};
 
     std::shared_ptr<Linear> WQ_;
     std::shared_ptr<Linear> WK_;
@@ -28,19 +28,19 @@ private:
     std::shared_ptr<Parameter> q_norm_weight_;
     std::shared_ptr<Parameter> k_norm_weight_;
 
-    TensorData make_gamma() const {
+    Tensor make_gamma() const {
         TensorShape gamma_shape = {1, 1, head_dim_};
-        TensorData gamma(gamma_shape);
-        gamma.fill(static_cast<TensorValueType>(1.0f));
+        Tensor gamma(gamma_shape);
+        gamma.fill(TensorValueType(1.0f));
         return gamma;
     }
 
-    static TensorData reshape_to_heads(const TensorData& src,
+    static Tensor reshape_to_heads(const Tensor& src,
                                        std::size_t batch,
                                        std::size_t seq,
                                        std::size_t heads,
                                        std::size_t head_dim) {
-        TensorData out({batch * heads, seq, head_dim});
+        Tensor out({batch * heads, seq, head_dim});
         for (std::size_t b = 0; b < batch; ++b) {
             for (std::size_t s = 0; s < seq; ++s) {
                 for (std::size_t h = 0; h < heads; ++h) {
@@ -55,10 +55,10 @@ private:
         return out;
     }
 
-    TensorData repeat_kv_heads(const TensorData& src,
+    Tensor repeat_kv_heads(const Tensor& src,
                                std::size_t batch,
                                std::size_t seq) const {
-        TensorData out({batch * num_heads_, seq, head_dim_});
+        Tensor out({batch * num_heads_, seq, head_dim_});
         for (std::size_t b = 0; b < batch; ++b) {
             for (std::size_t kv = 0; kv < num_kv_heads_; ++kv) {
                 for (std::size_t rep = 0; rep < kv_repeats_; ++rep) {
@@ -76,23 +76,26 @@ private:
         return out;
     }
 
-    TensorData rms_norm(const TensorData& src,
-                        const TensorData& gamma,
+    Tensor rms_norm(const Tensor& src,
+                        const Tensor& gamma,
                         std::size_t local_head_dim) const {
-        TensorData out(src.getShape());
+        Tensor out(src.getShape());
         const std::size_t batch = src.getShape()[0];
         const std::size_t seq = src.getShape()[1];
         const std::size_t dim = src.getShape()[2];
+        const nb::BFloat16 dim_b(dim);
+        const nb::BFloat16 one(1.0f);
 
         for (std::size_t b = 0; b < batch; ++b) {
             for (std::size_t s = 0; s < seq; ++s) {
-                float sum_sq = 0.0f;
+                nb::BFloat16 sum_sq(0.0f);
                 for (std::size_t d = 0; d < dim; ++d) {
-                    const float v = src(b, s, d);
+                    const nb::BFloat16 v = src(b, s, d);
                     sum_sq += v * v;
                 }
-                const float denom = std::sqrt(sum_sq / static_cast<float>(dim) + eps_);
-                const float inv_rms = 1.0f / denom;
+                const nb::BFloat16 mean_sq = sum_sq / dim_b;
+                const nb::BFloat16 denom = nb::bfloat16_sqrt(mean_sq + eps_);
+                const nb::BFloat16 inv_rms = one / denom;
                 for (std::size_t d = 0; d < dim; ++d) {
                     const std::size_t gamma_idx = d % local_head_dim;
                     out(b, s, d) = src(b, s, d) * inv_rms * gamma(0, 0, gamma_idx);
@@ -103,18 +106,19 @@ private:
         return out;
     }
 
-    TensorData compute_scores(const TensorData& q,
-                              const TensorData& k,
+    Tensor compute_scores(const Tensor& q,
+                              const Tensor& k,
                               std::size_t batch,
                               std::size_t seq) const {
         const std::size_t total_heads = batch * num_heads_;
-        TensorData scores({total_heads, seq, seq});
-        const float scale = 1.0f / std::sqrt(static_cast<float>(head_dim_));
+        Tensor scores({total_heads, seq, seq});
+        const nb::BFloat16 head_dim_b(head_dim_);
+        const nb::BFloat16 scale = nb::BFloat16(1.0f) / nb::bfloat16_sqrt(head_dim_b);
 
         for (std::size_t bh = 0; bh < total_heads; ++bh) {
             for (std::size_t i = 0; i < seq; ++i) {
                 for (std::size_t j = 0; j < seq; ++j) {
-                    float dot = 0.0f;
+                    nb::BFloat16 dot(0.0f);
                     for (std::size_t d = 0; d < head_dim_; ++d) {
                         dot += q(bh, i, d) * k(bh, j, d);
                     }
@@ -126,10 +130,10 @@ private:
         return scores;
     }
 
-    TensorData reshape_back(const TensorData& src,
+    Tensor reshape_back(const Tensor& src,
                             std::size_t batch,
                             std::size_t seq) const {
-        TensorData out({batch, seq, num_heads_ * head_dim_});
+        Tensor out({batch, seq, num_heads_ * head_dim_});
         for (std::size_t b = 0; b < batch; ++b) {
             for (std::size_t s = 0; s < seq; ++s) {
                 for (std::size_t h = 0; h < num_heads_; ++h) {
@@ -144,17 +148,17 @@ private:
         return out;
     }
 
-    TensorData apply_attention(const TensorData& scores,
-                               const TensorData& values,
+    Tensor apply_attention(const Tensor& scores,
+                               const Tensor& values,
                                std::size_t batch,
                                std::size_t seq) const {
         const std::size_t total_heads = batch * num_heads_;
-        TensorData out({total_heads, seq, head_dim_});
+        Tensor out({total_heads, seq, head_dim_});
 
         for (std::size_t bh = 0; bh < total_heads; ++bh) {
             for (std::size_t i = 0; i < seq; ++i) {
                 for (std::size_t d = 0; d < head_dim_; ++d) {
-                    float acc = 0.0f;
+                    nb::BFloat16 acc(0.0f);
                     for (std::size_t j = 0; j < seq; ++j) {
                         acc += scores(bh, i, j) * values(bh, j, d);
                     }
@@ -167,6 +171,8 @@ private:
     }
 
 public:
+    GQAAttention() {};
+
     GQAAttention(int input_dim,
                  int num_heads,
                  int num_kv_heads,
@@ -212,26 +218,26 @@ public:
         auto k_var = (*WK_)(x);
         auto v_var = (*WV_)(x);
 
-        TensorData q_norm = rms_norm(q_var->data, q_norm_weight_->data, head_dim_);
-        TensorData k_norm = rms_norm(k_var->data, k_norm_weight_->data, head_dim_);
+        Tensor q_norm = rms_norm(q_var->data, q_norm_weight_->data, head_dim_);
+        Tensor k_norm = rms_norm(k_var->data, k_norm_weight_->data, head_dim_);
 
-        TensorData q_heads = reshape_to_heads(q_norm, batch, seq, num_heads_, head_dim_);
-        TensorData k_heads_base = reshape_to_heads(k_norm, batch, seq, num_kv_heads_, head_dim_);
-        TensorData v_heads_base = reshape_to_heads(v_var->data, batch, seq, num_kv_heads_, head_dim_);
+        Tensor q_heads = reshape_to_heads(q_norm, batch, seq, num_heads_, head_dim_);
+        Tensor k_heads_base = reshape_to_heads(k_norm, batch, seq, num_kv_heads_, head_dim_);
+        Tensor v_heads_base = reshape_to_heads(v_var->data, batch, seq, num_kv_heads_, head_dim_);
 
-        TensorData k_heads = repeat_kv_heads(k_heads_base, batch, seq);
-        TensorData v_heads = repeat_kv_heads(v_heads_base, batch, seq);
+        Tensor k_heads = repeat_kv_heads(k_heads_base, batch, seq);
+        Tensor v_heads = repeat_kv_heads(v_heads_base, batch, seq);
 
-        TensorData scores = compute_scores(q_heads, k_heads, batch, seq);
+        Tensor scores = compute_scores(q_heads, k_heads, batch, seq);
         auto scores_var = Variable::create(scores, "scores");
         scores_var = softmax(scores_var, 2);
 
-        TensorData context_heads = apply_attention(scores_var->data, v_heads, batch, seq);
-        TensorData context = reshape_back(context_heads, batch, seq);
+        Tensor context_heads = apply_attention(scores_var->data, v_heads, batch, seq);
+        Tensor context = reshape_back(context_heads, batch, seq);
 
         return (*WO_)(Variable::create(context, "attention_output"));
     }
-    
+
     void loadWeights(std::istream& file, const MetadataMap& metadata){
         MetadataMap WQ_meta;
         MetadataMap WK_meta;

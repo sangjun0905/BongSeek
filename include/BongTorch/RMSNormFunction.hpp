@@ -6,7 +6,7 @@ namespace bs {
 
 class RMSNormFunction : public Function { 
 private:
-    const double epsilon_ = 1e-5; 
+    const nb::BFloat16 epsilon_{nb::BFloat16(1e-5f)};
 
 public:
     // Forward: y = x * rsqrt(mean(x^2) + eps) * gamma
@@ -35,8 +35,7 @@ public:
 // Function Wrapper (bs::rms_norm)
 inline std::shared_ptr<Variable> rms_norm(const std::shared_ptr<Variable>& x, const std::shared_ptr<Variable>& g) {
     auto f = std::make_shared<RMSNormFunction>();
-    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x, g}); 
-    return std::make_shared<Variable>(outs[0]);
+    return (*f)({x, g});
 }
 
 } // namespace bs

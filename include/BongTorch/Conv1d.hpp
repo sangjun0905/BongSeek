@@ -48,7 +48,7 @@ inline Tensor conv1d_forward(const Tensor& x,
                 const std::size_t oc = oc0 + ocg;
 
                 for (std::size_t t = 0; t < Sout; ++t) {
-                    float acc = 0.0f;
+                    nb::BFloat16 acc(0.0f);
 
                     for (std::size_t icg = 0; icg < Cin_per_g; ++icg) {
                         const std::size_t ic = ic0 + icg;
@@ -59,12 +59,11 @@ inline Tensor conv1d_forward(const Tensor& x,
                                 continue;
                             }
 
-                            acc += static_cast<float>(x(b, ic, static_cast<std::size_t>(x_idx)) *
-                                   w(oc, icg, k));
+                            acc += x(b, ic, static_cast<std::size_t>(x_idx)) * w(oc, icg, k);
                         }
                     }
 
-                    out(b, oc, t) = nb::BFloat16(acc);
+                    out(b, oc, t) = acc;
                 }
             }
         }
@@ -92,11 +91,11 @@ inline Tensor linear_forward(const Tensor& input,
     for (std::size_t b = 0; b < B; ++b) {
         for (std::size_t s = 0; s < S; ++s) {
             for (std::size_t of = 0; of < Cout; ++of) {
-                float acc = 0.0f;
+                nb::BFloat16 acc(0.0f);
                 for (std::size_t inf = 0; inf < Cin; ++inf) {
-                    acc += static_cast<float>(input(b, s, inf) * weight(of, inf, 0));
+                    acc += input(b, s, inf) * weight(of, inf, 0);
                 }
-                out(b, s, of) = nb::BFloat16(acc);
+                out(b, s, of) = acc;
             }
         }
     }
@@ -156,6 +155,8 @@ inline std::shared_ptr<Variable> conv1d_op(const std::shared_ptr<Variable>& x,
 
 class Conv1d : public Module {
 public:
+    Conv1d(){};
+
     Conv1d(std::size_t in_channels,
            std::size_t conv_out_channels,
            std::size_t kernel,
@@ -232,6 +233,26 @@ public:
     std::shared_ptr<Parameter> conv_weight() const { return conv_weight_; }
     std::shared_ptr<Parameter> in_proj_weight() const { return in_proj_weight_; }
     std::shared_ptr<Parameter> out_proj_weight() const { return out_proj_weight_; }
+    void loadWeights(std::istream& file, const MetadataMap& metadata)
+    {
+        MetadataMap w1_meta;
+        MetadataMap w2_meta;
+        MetadataMap w3_meta;
+
+        for(auto& [key, value] : metadata) {
+            if(key.compare(0,3, "w1.") == 0) {
+                w1_meta[key.substr(3)] = value; // "w1." 제외
+            } 
+            else if (key.compare(0,3, "w2.") == 0) {
+                w2_meta[key.substr(3)] = value; // "w2." 제외
+            } 
+            else if (key.compare(0,3, "w3.") == 0) {
+                w3_meta[key.substr(3)] = value; // "w3." 제외
+            }
+        }
+
+        // conv layer 수정 하면 loadweights 호출
+    }
 
 private:
     std::shared_ptr<Variable> adapt_input_layout(const std::shared_ptr<Variable>& x) const {
@@ -255,15 +276,18 @@ private:
         const std::size_t block = out_proj_out_features_;
 
         Tensor gated({B, S, block});
+        const nb::BFloat16 one(1.0f);
 
         for (std::size_t b = 0; b < B; ++b) {
             for (std::size_t s = 0; s < S; ++s) {
                 for (std::size_t i = 0; i < block; ++i) {
-                    const float a = static_cast<float>(in_proj_out(b, s, i));
-                    const float b_gate = static_cast<float>(in_proj_out(b, s, i + block));
-                    const float c = static_cast<float>(in_proj_out(b, s, i + 2 * block));
-                    const float sigma = 1.0f / (1.0f + std::exp(-b_gate));
-                    gated(b, s, i) = nb::BFloat16(a * sigma + c);
+                    const nb::BFloat16 a = in_proj_out(b, s, i);
+                    const nb::BFloat16 b_gate = in_proj_out(b, s, i + block);
+                    const nb::BFloat16 c = in_proj_out(b, s, i + 2 * block);
+                    const nb::BFloat16 exp_neg = nb::bfloat16_exp(-b_gate);
+                    const nb::BFloat16 denom = one + exp_neg;
+                    const nb::BFloat16 sigma = one / denom;
+                    gated(b, s, i) = a * sigma + c;
                 }
             }
         }
@@ -285,6 +309,8 @@ private:
     std::size_t out_proj_out_features_;
     std::size_t out_proj_input_features_;
     bool use_gated_path_ = false;
+
+    
 };
 
 } // namespace bs

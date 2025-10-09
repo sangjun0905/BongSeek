@@ -46,9 +46,7 @@ inline std::shared_ptr<Variable> rope(const std::shared_ptr<Variable>& x,
     const std::shared_ptr<Variable>& C,
     const std::shared_ptr<Variable>& S) {
     auto f = std::make_shared<RoPE>();
-    // (*f) 오버로딩을 통해 Function 호출
-    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x, C, S});
-    return std::make_shared<Variable>(outs[0]);
+    return (*f)({x, C, S});
 }
 
 } // namespace bs
