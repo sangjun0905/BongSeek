@@ -4,7 +4,7 @@
 #include <memory>
 #include <stdexcept>
 #include <vector>
-
+#include "Module.hpp"
 #include "Core.hpp"
 
 namespace bs {
