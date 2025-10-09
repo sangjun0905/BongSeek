@@ -1,89 +1,290 @@
 #pragma once
 
-#include "module.hpp" // Module 클래스 정의
-#include "core.hpp"   // TensorData, Variable, Parameter, Function 정의
+#include <cmath>
 #include <memory>
 #include <stdexcept>
-#include <array>
+#include <vector>
 
-namespace bs { 
+#include "Core.hpp"
 
-// 1. Conv1d Function (연산 노드): 실제 합성곱 연산을 담당
+namespace bs {
 
-class Conv1d : public Function {
-private:
-    // 생성자에서 설정된 연산 파라미터 (stride, padding, groups)
-    int stride_, padding_, groups_;
+namespace detail {
 
-public:
-    explicit Conv1d(int stride = 1, int padding = 0, int groups = 1)
-        : stride_(stride), padding_(padding), groups_(groups) {}
+inline Tensor conv1d_forward(const Tensor& x,
+                                 const Tensor& w,
+                                 int stride,
+                                 int padding,
+                                 std::size_t groups) {
+    const auto x_shape = x.getShape();
+    const auto w_shape = w.getShape();
 
-    // 순전파: nb::conv1d를 사용하여 실제 텐서 연산을 수행합니다.
-    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        // xs[0] = x (입력), xs[1] = w (가중치)
-        return { nb::conv1d(xs[0], xs[1], stride_, padding_, groups_) };
+    const std::size_t B   = x_shape[0];
+    const std::size_t Cin = x_shape[1];
+    const std::size_t Sin = x_shape[2];
+    const std::size_t Cout = w_shape[0];
+    const std::size_t K    = w_shape[2];
+
+    if (groups == 0 || Cin % groups != 0 || Cout % groups != 0) {
+        throw std::runtime_error("conv1d_forward: invalid groups for given channel sizes.");
     }
-};
+    const std::size_t Cin_per_g  = Cin / groups;
+    const std::size_t Cout_per_g = Cout / groups;
+    if (w_shape[1] != Cin_per_g) {
+        throw std::runtime_error("conv1d_forward: weight shape[1] must equal Cin_per_group.");
+    }
 
-// Function Wrapper: conv1d(x, w, ...) 형태로 편리하게 연산을 호출하고 그래프를 연결합니다.
-inline std::shared_ptr<Variable> conv1d(
-    const std::shared_ptr<Variable>& x, 
-    const std::shared_ptr<Variable>& w, 
-    int stride = 1, 
-    int padding = 0, 
-    int groups = 1) 
-{
-    auto f = std::make_shared<Conv1d>(stride, padding, groups);
-    // (*f) 오버로딩을 통해 Function::operator() 호출
-    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x, w}); 
-    return outs[0];
+    const std::size_t Sout = static_cast<std::size_t>(
+        (static_cast<int>(Sin) + 2 * padding - static_cast<int>(K)) / stride + 1);
+
+    Tensor out({B, Cout, Sout});
+
+    for (std::size_t b = 0; b < B; ++b) {
+        for (std::size_t g = 0; g < groups; ++g) {
+            const std::size_t ic0 = g * Cin_per_g;
+            const std::size_t oc0 = g * Cout_per_g;
+
+            for (std::size_t ocg = 0; ocg < Cout_per_g; ++ocg) {
+                const std::size_t oc = oc0 + ocg;
+
+                for (std::size_t t = 0; t < Sout; ++t) {
+                    float acc = 0.0f;
+
+                    for (std::size_t icg = 0; icg < Cin_per_g; ++icg) {
+                        const std::size_t ic = ic0 + icg;
+
+                        for (std::size_t k = 0; k < K; ++k) {
+                            const int x_idx = static_cast<int>(t * stride + k) - padding;
+                            if (x_idx < 0 || x_idx >= static_cast<int>(Sin)) {
+                                continue;
+                            }
+
+                            acc += static_cast<float>(x(b, ic, static_cast<std::size_t>(x_idx)) *
+                                   w(oc, icg, k));
+                        }
+                    }
+
+                    out(b, oc, t) = nb::BFloat16(acc);
+                }
+            }
+        }
+    }
+
+    return out;
 }
 
+inline Tensor linear_forward(const Tensor& input,
+                                 const Tensor& weight) {
+    const auto in_shape = input.getShape();
+    const auto w_shape  = weight.getShape();
 
-// 2. Conv1dLayer Module (계층): 가중치와 편향을 관리
-class Conv1dLayer : public Module {
-private:
-    std::shared_ptr<Parameter> W; // 학습 가능한 가중치 커널
-    std::shared_ptr<Parameter> b; // 학습 가능한 편향
-    int stride_, padding_;
-    bool use_bias_;
+    const std::size_t B   = in_shape[0];
+    const std::size_t S   = in_shape[1];
+    const std::size_t Cin = in_shape[2];
+    const std::size_t Cout = w_shape[0];
 
+    if (w_shape[1] != Cin) {
+        throw std::runtime_error("linear_forward: weight in_features must match input.");
+    }
+
+    Tensor out({B, S, Cout});
+
+    for (std::size_t b = 0; b < B; ++b) {
+        for (std::size_t s = 0; s < S; ++s) {
+            for (std::size_t of = 0; of < Cout; ++of) {
+                float acc = 0.0f;
+                for (std::size_t inf = 0; inf < Cin; ++inf) {
+                    acc += static_cast<float>(input(b, s, inf) * weight(of, inf, 0));
+                }
+                out(b, s, of) = nb::BFloat16(acc);
+            }
+        }
+    }
+
+    return out;
+}
+
+inline Tensor transpose_bc(const Tensor& tensor) {
+    const auto shape = tensor.getShape();
+    Tensor out({shape[0], shape[2], shape[1]});
+    for (std::size_t b = 0; b < shape[0]; ++b)
+        for (std::size_t c = 0; c < shape[1]; ++c)
+            for (std::size_t s = 0; s < shape[2]; ++s)
+                out(b, s, c) = tensor(b, c, s);
+    return out;
+}
+
+inline Tensor transpose_cs(const Tensor& tensor) {
+    const auto shape = tensor.getShape();
+    Tensor out({shape[0], shape[2], shape[1]});
+    for (std::size_t b = 0; b < shape[0]; ++b)
+        for (std::size_t s = 0; s < shape[1]; ++s)
+            for (std::size_t c = 0; c < shape[2]; ++c)
+                out(b, c, s) = tensor(b, s, c);
+    return out;
+}
+
+} // namespace detail
+
+class Conv1dFunction : public Function {
 public:
-    // 생성자: 가중치와 편향을 초기화하고 등록합니다.
-    Conv1dLayer(int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0, bool bias = true)
-        : stride_(stride), padding_(padding), use_bias_(bias) 
-    {
-        // 1. 가중치 W 초기화 및 등록 (W Shape: {Out_C, In_C, Kernel_Size})
-        // C++17 이후 std::array를 TensorShape 대신 사용했다고 가정
-        std::array<size_t, 3> w_shape = {(size_t)out_channels, (size_t)in_channels, (size_t)kernel_size};
-        
-        // nb::randn: 랜덤 값으로 채워진 TensorData 생성 (추론 시 이 공간에 가중치가 로드됨)
-        Tensor W_data = nb::randn(w_shape); 
-        W = Parameter::create(W_data, "weight");
-        register_parameter("weight", W);
+    explicit Conv1dFunction(int stride, int padding, std::size_t groups)
+        : stride_(stride), padding_(padding), groups_(groups) {}
 
-        // 2. 편향 b 초기화 및 등록 (b Shape: {Out_C, 1, 1} - 브로드캐스팅용)
-        if (use_bias_) {
-            std::array<size_t, 3> b_shape = {(size_t)out_channels, 1, 1};
-            Tensor b_data = nb::randn(b_shape);
-            b = Parameter::create(b_data, "bias");
-            register_parameter("bias", b);
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
+        if (xs.size() != 2) {
+            throw std::runtime_error("Conv1dFunction expects [input, weight].");
         }
+        return { detail::conv1d_forward(xs[0], xs[1], stride_, padding_, groups_) };
     }
 
-    // 순전파: 실제 연산을 conv1d 래퍼 함수에 위임합니다.
+private:
+    int stride_;
+    int padding_;
+    std::size_t groups_;
+};
+
+inline std::shared_ptr<Variable> conv1d_op(const std::shared_ptr<Variable>& x,
+                                           const std::shared_ptr<Variable>& weight,
+                                           int stride,
+                                           int padding,
+                                           std::size_t groups) {
+    auto f = std::make_shared<Conv1dFunction>(stride, padding, groups);
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x, weight});
+    return outs;
+}
+
+class Conv1d : public Module {
+public:
+    Conv1d(std::size_t in_channels,
+           std::size_t conv_out_channels,
+           std::size_t kernel,
+           std::size_t in_proj_out_features,
+           std::size_t out_proj_out_features,
+           int stride = 1,
+           int padding = 0,
+           std::size_t groups = 1)
+        : stride_(stride),
+          padding_(padding),
+          groups_(groups),
+          in_channels_(in_channels),
+          conv_out_channels_(conv_out_channels),
+          in_proj_out_features_(in_proj_out_features),
+          out_proj_out_features_(out_proj_out_features) {
+
+        if (groups_ == 0 || in_channels_ % groups_ != 0) {
+            throw std::runtime_error("Conv1d: invalid groups for given input channels.");
+        }
+        if (conv_out_channels_ % groups_ != 0) {
+            throw std::runtime_error("Conv1d: conv_out_channels must be divisible by groups.");
+        }
+        if (out_proj_out_features_ == 0) {
+            throw std::runtime_error("Conv1d: out_proj_out_features must be positive.");
+        }
+
+        std::size_t gating_factor = 0;
+        if (in_proj_out_features_ % out_proj_out_features_ == 0) {
+            gating_factor = in_proj_out_features_ / out_proj_out_features_;
+        }
+        if (gating_factor == 0) {
+            throw std::runtime_error("Conv1d: in_proj_out_features must be a multiple of out_proj_out_features.");
+        }
+        if (gating_factor != 1 && gating_factor != 3) {
+            throw std::runtime_error("Conv1d: only gating factors of 1 or 3 are supported.");
+        }
+
+        use_gated_path_ = (gating_factor == 3);
+        out_proj_input_features_ = use_gated_path_ ? out_proj_out_features_ : in_proj_out_features_;
+
+        TensorShape conv_shape = {conv_out_channels_, in_channels_ / groups_, kernel};
+        conv_weight_ = Parameter::create(Tensor(conv_shape), "conv.weight");
+        conv_weight_->data.fill(nb::BFloat16(0.0f));
+        register_parameter("conv.weight", conv_weight_);
+
+        TensorShape in_proj_shape = {in_proj_out_features_, conv_out_channels_, 1};
+        in_proj_weight_ = Parameter::create(Tensor(in_proj_shape), "in_proj.weight");
+        in_proj_weight_->data.fill(nb::BFloat16(0.0f));
+        register_parameter("in_proj.weight", in_proj_weight_);
+
+        TensorShape out_proj_shape = {out_proj_out_features_, out_proj_input_features_, 1};
+        out_proj_weight_ = Parameter::create(Tensor(out_proj_shape), "out_proj.weight");
+        out_proj_weight_->data.fill(nb::BFloat16(0.0f));
+        register_parameter("out_proj.weight", out_proj_weight_);
+    }
+
     std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) override {
-        // 1. 합성곱 연산: convld(입력 x, 가중치 W)
-        auto output = conv1d(x, W, stride_, padding_); // groups는 1로 가정
+        auto conv_input = adapt_input_layout(x);
 
-        // 2. 편향 덧셈 (브로드캐스팅 연산자 오버로딩 사용)
-        if (use_bias_) {
-            output = output + b; // Variable + Parameter 연산자 오버로딩
+        auto conv_out = conv1d_op(conv_input, conv_weight_, stride_, padding_, groups_);
+
+        auto conv_transposed = detail::transpose_bc(conv_out->data);
+        auto in_proj_out = detail::linear_forward(conv_transposed, in_proj_weight_->data);
+
+        Tensor proj_input = use_gated_path_ ? apply_gating(in_proj_out)
+                                                : in_proj_out;
+
+        auto out_proj_out = detail::linear_forward(proj_input, out_proj_weight_->data);
+
+        auto final_back = detail::transpose_cs(out_proj_out);
+        return Variable::create(final_back, "conv_out_proj");
+    }
+
+    std::shared_ptr<Parameter> conv_weight() const { return conv_weight_; }
+    std::shared_ptr<Parameter> in_proj_weight() const { return in_proj_weight_; }
+    std::shared_ptr<Parameter> out_proj_weight() const { return out_proj_weight_; }
+
+private:
+    std::shared_ptr<Variable> adapt_input_layout(const std::shared_ptr<Variable>& x) const {
+        const auto shape = x->data.getShape();
+        if (shape[1] == in_channels_) {
+            return x;
         }
 
-        return output;
+        if (shape[2] == in_channels_) {
+            auto transposed = detail::transpose_cs(x->data);
+            return Variable::create(transposed, x->name + "_transpose_cs");
+        }
+
+        throw std::runtime_error("Conv1d::forward: input tensor must be (B, C_in, S) or (B, S, C_in).");
     }
+
+    Tensor apply_gating(const Tensor& in_proj_out) const {
+        const auto shape = in_proj_out.getShape();
+        const std::size_t B = shape[0];
+        const std::size_t S = shape[1];
+        const std::size_t block = out_proj_out_features_;
+
+        Tensor gated({B, S, block});
+
+        for (std::size_t b = 0; b < B; ++b) {
+            for (std::size_t s = 0; s < S; ++s) {
+                for (std::size_t i = 0; i < block; ++i) {
+                    const float a = static_cast<float>(in_proj_out(b, s, i));
+                    const float b_gate = static_cast<float>(in_proj_out(b, s, i + block));
+                    const float c = static_cast<float>(in_proj_out(b, s, i + 2 * block));
+                    const float sigma = 1.0f / (1.0f + std::exp(-b_gate));
+                    gated(b, s, i) = nb::BFloat16(a * sigma + c);
+                }
+            }
+        }
+
+        return gated;
+    }
+
+    std::shared_ptr<Parameter> conv_weight_;
+    std::shared_ptr<Parameter> in_proj_weight_;
+    std::shared_ptr<Parameter> out_proj_weight_;
+
+    int stride_;
+    int padding_;
+    std::size_t groups_;
+
+    std::size_t in_channels_;
+    std::size_t conv_out_channels_;
+    std::size_t in_proj_out_features_;
+    std::size_t out_proj_out_features_;
+    std::size_t out_proj_input_features_;
+    bool use_gated_path_ = false;
 };
 
 } // namespace bs
