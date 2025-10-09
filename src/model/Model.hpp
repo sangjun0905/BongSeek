@@ -5,7 +5,7 @@
 #include <memory>
 #include <map>
 #include <fstream>
-#include "Config.hpp"
+#include "ModelConfig.hpp"
 #include "../NumBong/Tensor.hpp"
 #include "../BongTorch/Module.hpp"
 #include "../BongTorch/GQAAttention.hpp"
@@ -180,7 +180,7 @@ class Model {
     MetadataMap other_weights;
 public:
 
-	Model(Config config) {
+	Model(ModelConfig config("model_dir")) {
 		
 		embedding = bs::Embedding(config.vocab_size, config.hidden_size);
 		embednorm = bs::RMSNorm(config.hidden_size);
