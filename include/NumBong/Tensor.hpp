@@ -151,6 +151,62 @@ int normalize_axis(int axis) {
     return axis;
 }
 
+template<std::size_t Rank>
+std::array<std::size_t, Rank> resolve_reshape_dims(const std::vector<std::ptrdiff_t>& dims,
+                                                   std::size_t total_size) {
+    if (dims.size() != Rank) {
+        throw std::invalid_argument("nb::reshape: dimension count must match tensor rank");
+    }
+
+    std::array<std::size_t, Rank> result{};
+    std::size_t known_product = 1;
+    int infer_index = -1;
+    bool has_zero_dim = false;
+
+    for (std::size_t i = 0; i < Rank; ++i) {
+        const auto dim = dims[i];
+        if (dim == -1) {
+            if (infer_index != -1) {
+                throw std::invalid_argument("nb::reshape: only one inferred dimension allowed");
+            }
+            infer_index = static_cast<int>(i);
+            result[i] = 0; // placeholder until inference
+        } else if (dim >= 0) {
+            const auto as_size = static_cast<std::size_t>(dim);
+            result[i] = as_size;
+            if (as_size == 0) {
+                has_zero_dim = true;
+            } else if (known_product > 0) {
+                known_product *= as_size;
+            }
+        } else {
+            throw std::invalid_argument("nb::reshape: dimensions must be non-negative or -1");
+        }
+    }
+
+    if (has_zero_dim && total_size != 0) {
+        throw std::invalid_argument("nb::reshape: zero dimension requires tensor with zero elements");
+    }
+
+    if (infer_index != -1) {
+        if (has_zero_dim) {
+            result[infer_index] = 0;
+        } else {
+            if (known_product == 0 || total_size % known_product != 0) {
+                throw std::invalid_argument("nb::reshape: cannot infer dimension with non-divisible size");
+            }
+            result[infer_index] = total_size / known_product;
+        }
+    } else {
+        const std::size_t expected_size = has_zero_dim ? 0 : known_product;
+        if (expected_size != total_size) {
+            throw std::invalid_argument("nb::reshape: total size mismatch");
+        }
+    }
+
+    return result;
+}
+
 } // namespace detail
 
 template<typename T, std::size_t Rank>
@@ -420,7 +476,7 @@ public:
         return out;
     }
 
-    Tensor negate() const {
+    Tensor neg() const {
         Tensor out(shape_);
         const std::size_t total = size();
         const T* src = data();
@@ -631,7 +687,7 @@ public:
     Tensor operator*(const T& scalar) const { return mul(scalar); }
     Tensor operator/(const T& scalar) const { return div(scalar); }
 
-    Tensor operator-() const { return negate(); }
+    Tensor operator-() const { return neg(); }
     Tensor operator^(double exponent) const { return pow(exponent); }
 
     template<typename U, std::enable_if_t<std::is_arithmetic_v<U>, int> = 0>
@@ -641,7 +697,7 @@ public:
 
     template<typename U, std::enable_if_t<std::is_arithmetic_v<U>, int> = 0>
     friend Tensor operator-(U scalar, const Tensor& tensor) {
-        Tensor result = tensor.negate();
+        Tensor result = tensor.neg();
         result.iadd(static_cast<T>(scalar));
         return result;
     }
@@ -768,6 +824,68 @@ TensorType as_cpu(const TensorType& tensor) {
 template<typename TensorType>
 TensorType as_gpu(const TensorType& tensor) {
     return tensor;
+}
+
+template<typename T, std::size_t Rank>
+Tensor<T, Rank> reshape(const Tensor<T, Rank>& tensor,
+                        const typename Tensor<T, Rank>::shape_type& target_shape) {
+    const std::size_t new_size = detail::compute_size(target_shape);
+    if (new_size != tensor.size()) {
+        throw std::invalid_argument("nb::reshape: total size mismatch");
+    }
+
+    Tensor<T, Rank> out(target_shape);
+    if (new_size > 0) {
+        std::copy(tensor.data(), tensor.data() + new_size, out.data());
+    }
+    return out;
+}
+
+template<typename T, std::size_t Rank>
+Tensor<T, Rank> reshape(const Tensor<T, Rank>& tensor, const Shape& dims) {
+    return reshape(tensor, detail::shape_to_array<Rank>(dims));
+}
+
+template<typename T, std::size_t Rank>
+Tensor<T, Rank> reshape(const Tensor<T, Rank>& tensor, const std::vector<std::ptrdiff_t>& dims) {
+    return reshape(tensor, detail::resolve_reshape_dims<Rank>(dims, tensor.size()));
+}
+
+template<typename T, std::size_t Rank>
+Tensor<T, Rank> reshape(const Tensor<T, Rank>& tensor, std::initializer_list<std::ptrdiff_t> dims) {
+    return reshape(tensor, std::vector<std::ptrdiff_t>(dims));
+}
+
+template<typename T, std::size_t Rank>
+Tensor<T, Rank> repeat(const Tensor<T, Rank>& tensor, std::size_t repeats, int axis) {
+    if (repeats == 0) {
+        auto out_shape = tensor.getShape();
+        out_shape[static_cast<std::size_t>(detail::normalize_axis<Rank>(axis))] = 0;
+        return Tensor<T, Rank>(out_shape);
+    }
+
+    const int normalized_axis = detail::normalize_axis<Rank>(axis);
+    const std::size_t axis_index = static_cast<std::size_t>(normalized_axis);
+
+    auto input_shape = tensor.getShape();
+    const std::size_t axis_dim = input_shape[axis_index];
+    auto out_shape = input_shape;
+    out_shape[axis_index] = axis_dim * repeats;
+
+    Tensor<T, Rank> out(out_shape);
+    if (axis_dim == 0) {
+        return out;
+    }
+
+    detail::for_each_index<Rank>(input_shape, [&](const auto& idx) {
+        for (std::size_t r = 0; r < repeats; ++r) {
+            auto out_idx = idx;
+            out_idx[axis_index] = idx[axis_index] + r * axis_dim;
+            out[out_idx] = tensor[idx];
+        }
+    });
+
+    return out;
 }
 
 template<typename T, std::size_t Rank>

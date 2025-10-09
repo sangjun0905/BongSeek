@@ -30,7 +30,7 @@ public:
 inline std::shared_ptr<Variable> silu(const std::shared_ptr<Variable>& x) {
     auto f = std::make_shared<SiLU>();
     auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{x});
-    return outs[0];
+    return std::make_shared<Variable>(outs[0]);
 }
 
 } // namespace bs

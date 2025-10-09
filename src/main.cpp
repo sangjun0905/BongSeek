@@ -1,8 +1,8 @@
-#include "model/Model.hpp"
+#include "bongseek/Model.hpp"
 #include <iostream>
 #include <fstream>
-#include "model/WeightLoader.hpp"
-#include "model/Config.hpp"
+#include "bongseek/WeightLoader.hpp"
+#include "bongseek/Config.hpp"
 
 using namespace std;
 
@@ -10,7 +10,7 @@ int main() {
     
     WeightLoader loader;
 
-    string filename =""
+    string filename ="../model/model.safetensors";
 
     istream file(filename);
     loader.load(filename);

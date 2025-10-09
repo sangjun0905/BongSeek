@@ -27,6 +27,8 @@ set(BONGSEEK_SOURCES
     src/BongSeek/TransformerModel.cpp
     src/BongSeek/WeightLoader.cpp
     src/BongSeek/LLM.cpp
+    src/BongSeek/WeightLoader.cpp
+    src/BongSeek/Model.cpp
 )
 
 

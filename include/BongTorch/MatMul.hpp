@@ -20,7 +20,7 @@ inline std::shared_ptr<Variable> matmul(const std::shared_ptr<Variable>& a, cons
     auto f = std::make_shared<MatMul>();
     // Function::operator()를 호출하고 결과를 가져옵니다.
     auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{a, b});
-    return outs[0]; // 단일 출력을 반환
+    return std::make_shared<Variable>(outs[0]); // 단일 출력을 반환
 }
 
 }

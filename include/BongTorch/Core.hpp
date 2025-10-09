@@ -99,35 +99,36 @@ public:
 class Add : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        return { nb::add(xs[0], xs[1]) };
+        return { xs[0].add( xs[1]) };
     }    
 };
 
 class Mul : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        return { nb::mul(xs[0] ,xs[1]) };
+        return { xs[0].mul(xs[1]) };
     }
 };
 
 class Neg : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        return { nb::neg(xs[0]) };
+        return { xs[0].neg() };
     }
 };
 
 class Sub : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        return { nb::sub(xs[0] ,xs[1]) };
+        return { xs[0].sub(xs[1]) };
     }
 };
 
 class Div : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        return { nb::div(xs[0] ,xs[1]) };
+        return { xs[0].div(xs[1]) };
+        
     }
 };
 

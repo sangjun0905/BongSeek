@@ -11,7 +11,8 @@ public:
     std::shared_ptr<Parameter> weight;
 
     RMSNorm(int dim) {
-        weight = Parameter::create(nb::ones({(size_t)dim}));
+        Tensor<BFloat16, 1> a((size_t) dim);
+        weight = Parameter::create(a);
     }
 
     std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) override {

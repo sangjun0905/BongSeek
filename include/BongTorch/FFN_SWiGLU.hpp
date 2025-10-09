@@ -36,7 +36,7 @@ public:
         
         // 3. 원소별 곱셈 (SWiGLU 핵심)
         // Variable의 * 연산자 오버로딩 (Mul Function) 사용
-        auto hidden_state = activated_gate * value_output; 
+        auto hidden_state = mul(activated_gate, value_output); 
         
         // 4. Down Projection
         auto output = (*down_linear)(hidden_state); // (SiLU(...) * Value) * W_3
