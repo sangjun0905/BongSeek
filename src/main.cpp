@@ -1,15 +1,14 @@
-<<<<<<< HEAD
-﻿// src/main.cpp
-#include <iostream>
+// src/main.cpp
+#include <algorithm>
 #include <iomanip>
+#include <iostream>
 
 #include "BongTorch/Core.hpp"
 #include "BongTorch/GQAAttention.hpp"
 
 using namespace bs;
 
-
-// 간단한 텐서 초기화 유틸
+// Fill helper used for deterministic tensor/parameter init.
 static void fill_tensor(Tensor& tensor, float start, float step) {
     auto* ptr = tensor.data();
     const std::size_t total = tensor.size();
@@ -19,16 +18,6 @@ static void fill_tensor(Tensor& tensor, float start, float step) {
         value += step;
     }
 }
-=======
-#include "bongseek/Model.hpp"
-#include <iostream>
-#include <fstream>
-#include <string>
-#include "bongseek/WeightLoader.hpp"
-#include "bongseek/Config.hpp"
-
-using namespace std;
->>>>>>> 5436e6a1e624c5f6ac700af8b7d32c5a86b18715
 
 static void print_slice(const Tensor& tensor,
                         std::size_t b,
@@ -38,17 +27,18 @@ static void print_slice(const Tensor& tensor,
     for (std::size_t d = 0; d < count; ++d) {
         std::cout << std::fixed << std::setprecision(6)
                   << static_cast<float>(tensor(b, s, d));
-        if (d + 1 != count) std::cout << ", ";
+        if (d + 1 != count) {
+            std::cout << ", ";
+        }
     }
     std::cout << "]\n";
 }
 
 int main() {
-<<<<<<< HEAD
     const std::size_t batch        = 1;
     const std::size_t seq          = 4;
     const std::size_t head_dim     = 8;
-    const std::size_t num_heads    = 4;      // 모델 차원 32
+    const std::size_t num_heads    = 4;      // model dim = 32
     const std::size_t num_kv_heads = 2;
     const std::size_t model_dim    = head_dim * num_heads;
 
@@ -76,34 +66,7 @@ int main() {
     std::cout << "\nOutput slice (batch 0, token 0, first 8 dims):\n";
     print_slice(output->data, 0, 0,
                 std::min<std::size_t>(8, output->data.getShape()[2]));
-=======
-    
-    WeightLoader loader;
-
-    string filename ="../model/model.safetensors";
-    cout << "test1 "<<endl;
-    ifstream file(filename, std::ios::binary);
-    cout << "test2 "<<endl;
-    loader.load(filename);
-    cout << "test3 "<<endl;
-    
-    MetadataMap metadata;
-
-    metadata = loader.get_tensor_map();
-
-    cout << "test4 "<<endl;
-    Config config;
-    Model model(config);
-
-    model.load_weights(file, metadata);
-    cout << "test5 "<<endl;
-    
->>>>>>> 5436e6a1e624c5f6ac700af8b7d32c5a86b18715
 
     std::cout << "\nGQAAttention demo finished.\n";
     return 0;
 }
-<<<<<<< HEAD
-=======
-
->>>>>>> 5436e6a1e624c5f6ac700af8b7d32c5a86b18715

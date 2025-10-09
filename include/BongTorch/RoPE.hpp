@@ -1,4 +1,4 @@
-#pragma once 
+#pragma once
 
 #include "Core.hpp"
 #include <memory>
@@ -6,47 +6,42 @@
 namespace bs {
 
 class RoPE : public Function {
+private:
+    static Tensor apply_rope(const Tensor& x,
+                             const Tensor& cos_tensor,
+                             const Tensor& sin_tensor) {
+        const int last_axis = static_cast<int>(x.ndim()) - 1;
+        const int d_k = static_cast<int>(x.shape()[last_axis]);
+        const int d_half = d_k / 2;
+
+        Tensor x_a = nb::split(x, 0, d_half);
+        Tensor x_b = nb::split(x, 1, d_half);
+
+        Tensor term1 = (x_a * cos_tensor) - (x_b * sin_tensor);
+        Tensor term2 = (x_b * cos_tensor) + (x_a * sin_tensor);
+
+        std::vector<Tensor> parts{term1, term2};
+        return nb::concat(parts, last_axis);
+    }
+
 public:
+    std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x,
+                                      const std::shared_ptr<Variable>& cos_tensor,
+                                      const std::shared_ptr<Variable>& sin_tensor) {
+        Tensor rotated = apply_rope(x->data, cos_tensor->data, sin_tensor->data);
+        return Variable::create(rotated, "rope");
+    }
 
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
-        const Tensor& x = xs[0]; // Input Tensor
-        const Tensor& C = xs[1]; // Cos Component
-        const Tensor& S = xs[2]; // Sin Component 
-
-        // 1. d_k와 d_half 계산 (x의 마지막 축 차원)
-        // NOTE: TensorData::shape()가 std::vector<size_t>를 반환하고
-        // x.ndim()이 텐서의 랭크를 반환한다고 가정
-        int d_k = static_cast<int>(x.shape()[x.ndim() - 1]);
-        int d_half = d_k / 2;
-        
-        // 2. 텐서 분할 (x_A와 x_B)
-        // NOTE: nb::split이 마지막 축을 기준으로 분할한다고 가정합니다.
-        Tensor x_A = nb::split(x, 0, d_half); // 앞쪽 절반 (x_0)
-        Tensor x_B = nb::split(x, 1, d_half); // 뒤쪽 절반 (x_1)
-
-        // 3. 회전 행렬 적용 (term1, term2 계산)
-        // [x_0 * C - x_1 * S]
-        Tensor term1 = (x_A * C) - (x_B * S); 
-
-        // [x_1 * C + x_0 * S]
-        Tensor term2 = (x_B * C) + (x_A * S); 
-        
-        // 4. 결과 텐서 결합 (Concatenation)
-        std::vector<Tensor> input;
-        input.push_back(term1);
-        input.push_back(term2);
-        Tensor y = nb::concat(input, x.ndim() - 1); // 
-
-        return { y };
+        return { apply_rope(xs[0], xs[1], xs[2]) };
     }
 };
 
-// Function Wrapper
 inline std::shared_ptr<Variable> rope(const std::shared_ptr<Variable>& x,
-    const std::shared_ptr<Variable>& C,
-    const std::shared_ptr<Variable>& S) {
+                                      const std::shared_ptr<Variable>& cos_tensor,
+                                      const std::shared_ptr<Variable>& sin_tensor) {
     auto f = std::make_shared<RoPE>();
-    return (*f)({x, C, S});
+    return f->forward(x, cos_tensor, sin_tensor);
 }
 
 } // namespace bs
