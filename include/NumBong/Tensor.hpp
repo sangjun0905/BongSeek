@@ -228,7 +228,7 @@ inline Tensor<float, 3> concat(const std::vector<Tensor<float, 3>>& t, int axis)
 inline Tensor<float, 3> array(const std::vector<float>& t) { return Tensor<float, 3>(); } // Dummy
 
 template<typename T>
-inline Tensor<T, 3> conv1d(const Tensor<T, 3>& input, const Tensor<T, 3>& weight, int stride, int padding, int groups) {
+inline Tensor<T, 3> convld(const Tensor<T, 3>& input, const Tensor<T, 3>& weight, int stride, int padding, int groups) {
     auto in_shape = input.getShape();
     auto w_shape = weight.getShape();
 
