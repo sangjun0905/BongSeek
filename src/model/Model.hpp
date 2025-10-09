@@ -20,8 +20,8 @@ using namespace std;
 typedef shared_ptr<bs::Variable> datatype;
 
 struct Metadatainfo {
-	size_t offset;
-	size_t size_in_bytes;
+	size_t offset_start;
+	size_t offset_end;
 	nb::Shape shape;
 	std::string dtype;
 };
@@ -35,7 +35,7 @@ public:
 	{
 		return x;
 	};
-	virtual void loadWeights(ifstream& file, MetadataMap& metadata) = 0;
+	virtual void loadWeights(ifstream& file, const MetadataMap& metadata) = 0;
 
 };
 
@@ -80,24 +80,24 @@ public:
 		MetadataMap ffn_norm_meta;
 
 		for(auto [key, value]: metadata) {
-			if (key.starts_with("conv.")) {
-            	conv_meta[key.substr(5)] = value; // "conv." 제외
+			if (key.compare(0, 5, "conv.") == 0) {
+				conv_meta[key.substr(5)] = value; // "conv." 제외
 			} 
-			else if (key.starts_with("feed_forward.")) {
-            	ffn_meta[key.substr(13)] = value; // "feed_forward." 제외
-        	} // ... norm 등 ...
-			else if (key.starts_with("operator_norm.")) {
+			else if (key.compare(0, 13, "feed_forward.") == 0) {
+				ffn_meta[key.substr(13)] = value; // "feed_forward." 제외
+			} // ... norm 등 ...
+			else if (key.compare(0, 14, "operator_norm.") == 0) {
 				operator_norm_meta[key.substr(14)] = value; // "operator_norm." 제외
 			}
-			else if (key.starts_with("ffn_norm.")) {
+			else if (key.compare(0, 9, "ffn_norm.") == 0) {
 				ffn_norm_meta[key.substr(9)] = value; // "ffn_norm." 제외
 			}
 		}
     
-    conv.load_weights(file, conv_meta);
-    feed_forward->load_weights(file, ffn_meta);
-	operator_norm.load_weights(file, operator_norm_meta);
-	ffn_norm.load_weights(file, ffn_norm_meta);
+    conv.loadWeights(file, conv_meta);
+    feed_forward.loadWeights(file, ffn_meta);
+	operator_norm.loadWeights(file, operator_norm_meta);
+	ffn_norm.loadWeights(file, ffn_norm_meta);
 	}
 	
 };
@@ -128,7 +128,7 @@ public:
 	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
 		shared_ptr<bs::Variable> residual = x;
 		x = operator_norm.forward(x);
-		x = self_attn.forward(x, x, x, x);
+		x = self_attn.forward(x);
 		x = add(residual, x);
 
 		residual = x;
@@ -146,24 +146,24 @@ public:
 		MetadataMap ffn_norm_meta;
 
 		for(auto [key, value]: metadata) {
-			if (key.starts_with("self_attn.")) {
-            	conv_meta[key.substr(10)] = value; // "conv." 제외
+			if (key.compare(0, 10, "self_attn.") == 0) {
+				self_attn_meta[key.substr(10)] = value; // "self_attn." 제외
 			} 
-			else if (key.starts_with("feed_forward.")) {
-            	ffn_meta[key.substr(13)] = value; // "feed_forward." 제외
-        	} // ... norm 등 ...
-			else if (key.starts_with("operator_norm.")) {
+			else if (key.compare(0, 13, "feed_forward.") == 0) {
+				ffn_meta[key.substr(13)] = value; // "feed_forward." 제외
+			} // ... norm 등 ...
+			else if (key.compare(0, 14, "operator_norm.") == 0) {
 				operator_norm_meta[key.substr(14)] = value; // "operator_norm." 제외
 			}
-			else if (key.starts_with("ffn_norm.")) {
+			else if (key.compare(0, 9, "ffn_norm.") == 0) {
 				ffn_norm_meta[key.substr(9)] = value; // "ffn_norm." 제외
 			}
 		}
     
-    self_attn.load_weights(file, conv_meta);
-    feed_forward.load_weights(file, ffn_meta);
-	operator_norm.load_weights(file, operator_norm_meta);
-	ffn_norm.load_weights(file, ffn_norm_meta);
+    self_attn.loadWeights(file, self_attn_meta);
+    feed_forward.loadWeights(file, ffn_meta);
+	operator_norm.loadWeights(file, operator_norm_meta);
+	ffn_norm.loadWeights(file, ffn_norm_meta);
 	}
 
 };
@@ -184,7 +184,7 @@ public:
 		
 		embedding = bs::Embedding(config.vocab_size, config.hidden_size);
 		embednorm = bs::RMSNorm(config.hidden_size);
-		pe = bs:RoPE(config.hidden_size, config.max_position_embeddings);
+		//pe = bs::RoPE(config.hidden_size, config.max_position_embeddings);
 
 		int i = 0;
 		for (string type : config.layer_types) {
@@ -203,16 +203,16 @@ public:
 		}
 	}
 
-	Tensor forward(Tensor x) 
+	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) 
 	{
 		
-		Tensor embed = embedding.forward(x);
+		shared_ptr<bs::Variable> embed = embedding.forward(x);
 
 		//embedding norm(2048) -> (batch, token, 2048)			W(2048)
 		embed = embednorm.forward(embed);
 
 		//positional encoding -> (batch, token, 2048)			
-		Tensor current = pe.forward(embed);
+		shared_ptr<bs::Variable> current = pe.forward(embed);
 
 		//layers (batch, token, 2048)
 		for (auto& layer : layers) {
@@ -229,14 +229,13 @@ public:
 	
 	void load_weights(ifstream& file, MetadataMap metadata)
 	{
-		for (const auto& [key, meta] : all_metadata) {
-        std::vector<std::string> parts = split(key, '.'); // key를 '.' 기준으로 분리
-        
-        if (parts[0] == "model" && parts[1] == "layers") {
-            int layer_idx = std::stoi(parts[2]);
+		for (const auto& [key, meta] : metadata) {
+    
+        if (key.substr(0, 13)=="model.layers.") {
+            int layer_idx = stoi(key.substr(13, key.find('.', 13) - 13)); // "model.layers." 다음 숫자 추출
             // "model.layers.0." 부분을 제외한 나머지 키를 생성
             // 예: "self_attn.q_proj.weight"
-            std::string child_key = join(parts.begin() + 3, parts.end(), '.');
+            string child_key = key.substr(key.find('.', 13) + 1);
             weights_by_layer[layer_idx][child_key] = meta;
         } else {
             other_weights[key] = meta;
@@ -245,7 +244,7 @@ public:
 
     for (size_t i = 0; i < layers.size(); ++i) {
         if (weights_by_layer.count(i)) {
-            layers[i]->load_weights(file, weights_by_layer.at(i));
+            layers[i]->loadWeights(file, weights_by_layer.at(i));
         }
     }
 	}
@@ -264,7 +263,6 @@ BongSeek makeModel()
 	ifstream file("model.safetensors");
 
 	//safetensors �а� map ����� (���� �׽�Ʈ�� ����)
-
 
 	//���� model��ü load_weights�� �н��� ����� ����ġ ����
 
