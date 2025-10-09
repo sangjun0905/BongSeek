@@ -1,47 +1,11 @@
-#ifndef SELF_ATTENTION_HPP
-#define SELF_ATTENTION_HPP
+#pragma once
 
-#include "module.hpp" // Module, Linear, Parameter, MatMul 정의 포함
-#include "core.hpp"   // Variable, Add, Mul, Divv 등 기본 Function 포함
-#include <cmath>      // std::sqrt 사용
+#include "Core.hpp"
+#include "Softmax.hpp"
+#include "Linear.hpp"
+#include <cmath>      
 
-// Softmax Function 정의 (이전에 구현 완료)
-class Softmax : public Function {
-private:
-    using TensorData = typename Variable::TensorData;
-    int axis_;
-public:
-    explicit Softmax(int axis = -1) : axis_(axis) {}
-
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
-        const TensorData& x = xs[0];
-        
-        // 1. 안정화: x에서 max(x)를 빼줍니다. 
-        TensorData x_max = nb::max(x, axis_, true); 
-        TensorData x_shifted = x - x_max; 
-
-        // 2. 분자: exp(x_shifted)
-        TensorData numerator = nb::exp(x_shifted); 
-        
-        // 3. 분모: sum(numerator)
-        TensorData denominator = nb::sum(numerator, axis_, true); 
-        
-        // 4. 최종 계산
-        TensorData y = numerator / denominator;
-
-        return { y };
-    }
-};
-
-inline std::shared_ptr<Variable> softmax(const std::shared_ptr<Variable>& x, int axis = -1) {
-    auto f = std::make_shared<Softmax>(axis);
-    auto outs = (*f)({x});
-    return outs[0]; 
-}
-
-// ---------------------------------------------
-// SelfAttentionLayer Module 구현
-// ---------------------------------------------
+namespace bs {
 
 class SelfAttentionLayer : public Module {
 private:
@@ -114,4 +78,4 @@ public:
     }
 };
 
-#endif // SELF_ATTENTION_HPP
+} // namespace bs

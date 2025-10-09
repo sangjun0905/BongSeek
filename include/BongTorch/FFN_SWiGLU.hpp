@@ -1,4 +1,3 @@
-// FFN_SWiGLU.hpp
 #pragma once
 #include "Module.hpp"
 #include "Linear.hpp"
@@ -43,6 +42,29 @@ public:
         auto output = (*down_linear)(hidden_state); // (SiLU(...) * Value) * W_3
 
         return output;
+    }
+
+    void loadWeights(std::istream& file, const MetadataMap& metadata){
+        MetadataMap gate_linear_meta;
+        MetadataMap value_linear_meta;
+        MetadataMap down_linear_meta;
+
+
+        for(auto& [key, value] : metadata) {
+            if(key.compare(0, 12, "gate_linear.") == 0) {
+                gate_linear_meta[key.substr(12)] = value; // "gate_linear." 제외
+            } 
+            else if (key.compare(0, 13, "value_linear.") == 0) {
+                value_linear_meta[key.substr(13)] = value; // "value_linear." 제외
+            } 
+            else if (key.compare(0, 12, "down_linear.") == 0) {
+                down_linear_meta[key.substr(12)] = value; // "down_linear." 제외
+            }
+        }
+
+        gate_linear->loadWeights(file, gate_linear_meta);
+        value_linear->loadWeights(file, value_linear_meta);
+        down_linear->loadWeights(file, down_linear_meta);
     }
 };
 

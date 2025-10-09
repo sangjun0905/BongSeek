@@ -1,33 +1,28 @@
+#include "model/Model.hpp"
 #include <iostream>
-#include "NumBong/Tensor.hpp"
-#include "BongTorch/Core.hpp"
+#include <fstream>
+#include "model/WeightLoader.hpp"
+#include "model/Config.hpp"
+
+using namespace std;
 
 int main() {
-    using nb::Tensor;
+    
+    WeightLoader loader;
 
-    Tensor<float, 3> m1(2, 2, 2);
-    Tensor<float, 3> m2(2, 2, 2);
+    string filename =""
 
-    m1(0, 0, 0) = 1.0f;
-    m1(0, 0, 1) = 2.0f;
-    m1(0, 1, 0) = 3.0f;
-    m1(0, 1, 1) = 4.0f;
+    istream file(filename);
+    loader.load(filename);
+    
+    MetadataMap = loader.get_tensor_map();
 
-    m2(0, 0, 0) = 5.0f;
-    m2(0, 0, 1) = 6.0f;
-    m2(0, 1, 0) = 7.0f;
-    m2(0, 1, 1) = 8.0f;
+    Config config;
+    Model model(config);
 
-    auto A = Variable::create(m1, "A");
-    auto B = Variable::create(m2, "B");
+    model.load_weights(file, metadata);
 
-    auto C = add(mul(A, B), A);
-    C->backward();
-
-    std::cout << "C shape: " << C->data.shape_string() << '\n';
-    if (A->grad) {
-        std::cout << "dC/dA(0,0,0): " << A->grad->data(0, 0, 0) << '\n';
-    }
+    
 
     return 0;
 }
