@@ -45,14 +45,12 @@ public:
         MetadataMap down_linear_meta;
 
 
-        for(auto& [key, value] : metadata) {
-            if(key.compare(0, 3 "w1.") == 0) {
+        for (auto& [key, value] : metadata) {
+            if (key.compare(0, 3, "w1.") == 0) {
                 gate_linear_meta[key.substr(3)] = value; 
-            } 
-            else if (key.compare(0, 3, "w2.") == 0) {
+            } else if (key.compare(0, 3, "w2.") == 0) {
                 value_linear_meta[key.substr(3)] = value; // "value_linear." 제외
-            } 
-            else if (key.compare(0, 3, "w3.") == 0) {
+            } else if (key.compare(0, 3, "w3.") == 0) {
                 down_linear_meta[key.substr(3)] = value; // "down_linear." 제외
             }
         }

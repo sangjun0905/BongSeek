@@ -45,7 +45,6 @@ bool WeightLoader::load(const std::string& path) {
 
     auto register_tensor = [&](const std::string& tensor_name, const json& meta) {
         if (tensor_name.empty() || !meta.is_object()) return;
-        std::cout<<"tensor 이름 출력: "<< tensor_name <<std::endl;
 
         TensorInfo info;
         info.dtype = meta.value("data_type", meta.value("dtype", std::string{}));

@@ -48,9 +48,28 @@ public:
 
     void loadWeights(std::istream& file, const MetadataMap& metadata)
     {
-        long long startoffset = metadata.at("weight").offset_start;
-        long long endoffset = metadata.at("weight").offset_end;
-        W->data.loadWeight(file, startoffset, endoffset);
+        auto weight_it = metadata.find("weight");
+        if (weight_it == metadata.end()) {
+            std::cerr << "[Linear] weight 메타데이터를 찾을 수 없습니다.\n";
+            return;
+        }
+
+        const auto& weight_info = weight_it->second;
+        W->data.loadWeight(file,
+                           static_cast<std::streamoff>(weight_info.offset_start),
+                           static_cast<std::streamoff>(weight_info.offset_end));
+
+        if (use_bias && b) {
+            auto bias_it = metadata.find("bias");
+            if (bias_it != metadata.end()) {
+                const auto& bias_info = bias_it->second;
+                b->data.loadWeight(file,
+                                   static_cast<std::streamoff>(bias_info.offset_start),
+                                   static_cast<std::streamoff>(bias_info.offset_end));
+            } else {
+                std::cerr << "[Linear] bias 메타데이터가 없어 bias 로딩을 건너뜁니다.\n";
+            }
+        }
     }
 };
 

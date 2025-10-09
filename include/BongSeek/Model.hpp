@@ -197,7 +197,7 @@ public:
 		}
 	}
 
-	/*
+	
 	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) 
 	{
 		
@@ -219,42 +219,57 @@ public:
 
 
 		return current;
-	}*/
+	}
 
 	
 	void load_weights(istream& file, MetadataMap metadata)
 	{
 
-		for (const auto& [key, meta] : metadata) {
+        for (const auto& [key, meta] : metadata) {
     
-        	if (key.substr(0, 13)=="model.layers.") {
-            	int layer_idx = stoi(key.substr(13, key.find('.', 13) - 13)); // "model.layers." 다음 숫자 추출
-            	// "model.layers.0." 부분을 제외한 나머지 키를 생성
-            	// 예: "self_attn.q_proj.weight"
-            	string child_key = key.substr(key.find('.', 13) + 1);
-				MetadataMap a = weights_by_layer[layer_idx];
-				a[child_key] = meta;
-				weights_by_layer[layer_idx] = a;
-            	//weights_by_layer[layer_idx][child_key] = meta;
-				cout << layer_idx <<endl;
-        	} 
-			else {
-            	other_weights[key] = meta;
-        	}
-    	}
+            if (key.rfind("model.layers.", 0) == 0) {
+                const std::size_t index_begin = 13;
+                const std::size_t dot_pos = key.find('.', index_begin);
+                if (dot_pos == std::string::npos || dot_pos <= index_begin) {
+                    std::cerr << "[Model] 잘못된 레이어 키 형식: " << key << std::endl;
+                    continue;
+                }
+
+                const std::string index_str = key.substr(index_begin, dot_pos - index_begin);
+                int layer_idx = -1;
+                try {
+                    layer_idx = std::stoi(index_str);
+                } catch (const std::exception& e) {
+                    std::cerr << "[Model] 레이어 인덱스 파싱 실패(" << key << "): " << e.what() << std::endl;
+                    continue;
+                }
+
+                if (layer_idx < 0 || layer_idx >= static_cast<int>(layers.size())) {
+                    std::cerr << "[Model] 범위를 벗어난 레이어 인덱스 무시: " << key << std::endl;
+                    continue;
+                }
+
+                const std::string child_key = key.substr(dot_pos + 1);
+                if (child_key.empty()) {
+                    std::cerr << "[Model] 하위 메타 키 누락: " << key << std::endl;
+                    continue;
+                }
+
+                auto& layer_meta = weights_by_layer[layer_idx];
+                layer_meta[child_key] = meta;
+            } else {
+                other_weights[key] = meta;
+            }
+        }
 		cout<< "layer weight set test1" <<endl;
 
-    	for (int i = 0; i < layers.size(); i++) {
-        	if (weights_by_layer.find(i) != weights_by_layer.end()) {
-				cout << i << endl;
-				try{
-            		layers[i]->loadWeights(file, weights_by_layer[i]);
-				}
-				catch(const std::out_of_range& e) {
-					std::cerr <<"키가 없습니다: " << e.what() << endl;
-				}
-        	}
-  		}
+        for (std::size_t i = 0; i < layers.size(); ++i) {
+            auto it = weights_by_layer.find(static_cast<int>(i));
+            if (it == weights_by_layer.end()) {
+                continue;
+            }
+            layers[i]->loadWeights(file, it->second);
+        }
 		cout<< "layer weight set test2" <<endl;
 		
 		for (auto& [key, value] : other_weights) {

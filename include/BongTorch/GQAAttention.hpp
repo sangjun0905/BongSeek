@@ -259,20 +259,26 @@ public:
             else if (key.compare(0, 9, "out_proj.") == 0) {
                 WO_meta[key.substr(9)] = value; 
             } 
-            else if (key.compare(0, 15, "k_layernorm.") == 0) {
-                k_layernorm_meta[key.substr(15)] = value; // normalization 구현 시 weight추가
+            else if (key.compare(0, 12, "k_layernorm.") == 0) {
+                k_layernorm_meta[key.substr(12)] = value; // normalization 구현 시 weight추가
             }
-            else if (key.compare(0, 15, "q_layernorm.") == 0) {
-                q_layernorm_meta[key.substr(15)] = value; // normalization 구현 시 weight추가
+            else if (key.compare(0, 12, "q_layernorm.") == 0) {
+                q_layernorm_meta[key.substr(12)] = value; // normalization 구현 시 weight추가
             }
             // normalization 구현 시 weight추가
             
         }
 
-        //WQ_->loadWeights(file, WQ_meta);
-        //WK_->loadWeights(file, WK_meta);
-        //WV_->loadWeights(file, WV_meta);
-        //WO_->loadWeights(file, WO_meta);
+        WQ_->loadWeights(file, WQ_meta);
+        WK_->loadWeights(file, WK_meta);
+        WV_->loadWeights(file, WV_meta);
+        WO_->loadWeights(file, WO_meta);
+        long long startoffset = q_layernorm_meta.at("weight").offset_start;
+        long long endoffset = q_layernorm_meta.at("weight").offset_end;
+        q_norm_weight_->data.loadWeight(file, startoffset, endoffset);
+        startoffset = k_layernorm_meta.at("weight").offset_start;
+        endoffset = k_layernorm_meta.at("weight").offset_end;
+        k_norm_weight_->data.loadWeight(file, startoffset, endoffset);
         // normalization 구현 시 weight추가
     }
 };

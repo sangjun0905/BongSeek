@@ -59,9 +59,16 @@ public:
     }
     void loadWeights(std::istream& file, const MetadataMap& metadata)
     {
-        long long startoffset = metadata.at("weight").offset_start;
-        long long endoffset = metadata.at("weight").offset_end;
-        weight->data.loadWeight(file, startoffset, endoffset);
+        auto it = metadata.find("weight");
+        if (it == metadata.end()) {
+            std::cerr << "[RMSNorm] weight 메타데이터가 없어 로딩을 건너뜁니다.\n";
+            return;
+        }
+
+        const auto& info = it->second;
+        weight->data.loadWeight(file,
+                                static_cast<std::streamoff>(info.offset_start),
+                                static_cast<std::streamoff>(info.offset_end));
     }
 };
 
