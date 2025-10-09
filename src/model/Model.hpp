@@ -1,11 +1,13 @@
 #pragma once
-
 #include <iostream>
 #include <vector>
-#include <Eigen/Dense>
+#include <string>
 #include <memory>
+#include <map>
+#include <fstream>
+#include "Config.hpp"
+#include "../NumBong/Tensor.hpp"
 #include "../BongTorch/Module.hpp"
-#include "Functions.hpp"
 #include "../BongTorch/GQAAttention.hpp"
 #include "../BongTorch/RMSNorm.hpp"
 #include "../BongTorch/FFN_SWiGLU.hpp"
@@ -13,71 +15,53 @@
 #include "../BongTorch/Embedding.hpp"
 #include "../BongTorch/RoPE.hpp"
 
-
 using namespace std;
-using namespace Eigen;
 
 typedef shared_ptr<bs::Variable> datatype;
 
+struct Metadatainfo {
+	size_t offset;
+	size_t size_in_bytes;
+	nb::Shape shape;
+	std::string dtype;
+};
+
+using MetadataMap = map<string, Metadatainfo>;
+
 class Layer {
-	//AttentionLayer, ConvLayer ºÎ¸ğ Å¬·¡½º(»ó¼Ó)
 public:
 	virtual ~Layer() = default;
-	virtual Tensor forward(Tensor x)
+	virtual shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x)
 	{
 		return x;
 	};
-	virtual void loadWeights(ifstream& file, MetadataMap metadata) = 0;
+	virtual void loadWeights(ifstream& file, MetadataMap& metadata) = 0;
 
 };
 
 
 
-class ConvLayer : public Layer {  //LayerÀº ÀÓÀÇ·Î ¼³Á¤ÇØ³õÀº ºÎ¸ğ Å¬·¡½º(³ªÁß¿¡ ¸ÂÃç ¼öÁ¤)
-	/*
-	ÇÏ³ªÀÇ conv ·¹ÀÌ¾î¿¡ ÇÊ¿äÇÑ °Íµé Á¶¸³
-	ÀÔ·Â->*/
-	//operator_norm			(°¡ÁßÄ¡ Â÷¿ø : (2048)) ÇÙ½É ¿¬»ê(conv, attn)Àü¿¡ ¼öÇàÇÏ´Â Á¤±ÔÈ­
-	/*convlayer
-	(6144, 2048) -> conv Àü¿¡ 2048 ÀÔ·Â º¤ÅÍ¸¦ 6144·Î Åõ¿µprojection(2048*3 =6144)
-	(2048, 1, 3) -> 1d depth convolution(Ã¤³Î ¼ö, 1, Ä¿³Î Å©±â) Ã¤³Î ¼ö*Ä¿³Î Å©±â =6144
-	(2048, 2048) -> conv ¿¬»êÀ» ÅëÇØ Ã³¸®µÈ °á°ú¸¦ ´Ù½Ã ÇÑ¹ø Á¶ÇÕÇÏ°í Á¤¸®ÇÏ¿© ÃÖÁ¾ Ãâ·Â(2048)·Î ¸¸µå´Â Åõ¿µ
-	*/
-	//residual connection
-	//ffn norm -> (2048) feed forward ¿¬»ê¿¡ µé¾î°¡±â Àü¿¡ Àû¿ëµÇ´Â Á¤±ÔÈ­
-	/*feed forward
-	 w1 -> (10752, 2048) ÀÔ·Âº¤ÅÍ(2048)¸¦ Áß°£Â÷¿ø(10752)À¸·Î È®Àå
-	 w2 -> (2048, 10752) Áß°£ °á°ú(10752)¸¦ ´Ù½Ã ¸ğµ¨ÀÇ hidden_size(2048)·Î
-	 w3 -> (10752, 2048) swiglu ¿¬»êÀ» À§ÇØ ¾²ÀÓ(ÀÔ·ÂÀ» w1°ú º´·Ä·Î Ã³¸®)
-	*/
-
-	//residual connectionSS
-	//output -> next layer
+class ConvLayer : public Layer { 
 
 	string name;
-	bs::RMSNorm operation_norm;
+	bs::RMSNorm operator_norm;
 	bs::Conv1DLayer conv;
 	bs::RMSNorm ffn_norm;
 	bs::FFN_SWiGLU feed_forward;
-
-
-
 public:
 
-	ConvLayer(const string& name_prefix,
-		int hidden_size,
+	ConvLayer(int hidden_size,
 		int intermediate_size)
 	{
-		name = name_prefix;
-		operation_norm = bs::RMSNorm(name_prefix + ".operator_norm", hidden_size);
-		conv = bs::Conv1DLayer(name_prefix + ".conv", hidden_size, hidden_size, 3);  //ÀçÈ®ÀÎ ÇÊ¿ä
-		ffn_norm = bs::RMSNorm(name_prefix + ".ffn_norm", hidden_size);
-		feed_forward = bs::FFN_SWiGLU(name_prefix + ".feed_forward", hidden_size, intermediate_size);
+		operator_norm = bs::RMSNorm(hidden_size);
+		conv = bs::Conv1DLayer(hidden_size, hidden_size, 3);  //ë‚˜ì¤‘ì— í•œë²ˆ ë” ì¬í™•ì¸
+		ffn_norm = bs::RMSNorm(hidden_size);
+		feed_forward = bs::FFN_SWiGLU(hidden_size, intermediate_size);
 	}
 
-	datatype forward(datatype x) override {
-		datatype residual = x;
-		x = operation_norm.forward(x);
+	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
+		shared_ptr<bs::Variable> residual = x;
+		x = operator_norm.forward(x);
 		x = conv.forward(x);
 		x = add(residual, x);
 
@@ -88,84 +72,62 @@ public:
 		return x;
 	}
 
-	/*
-	void loadWeights(ifstream& file, MetadataMap metadata) override {
-		operation_norm.loadWeights(file, metadata);
-		conv.loadWeights(file, metadata);
-		ffn_norm.loadWeights(file, metadata);
-		feed_forward.loadWeights(file, metadata);
-	}*/
+	
+	void loadWeights(ifstream& file, const MetadataMap& metadata) override {
+		MetadataMap conv_meta;
+		MetadataMap ffn_meta;
+		MetadataMap operator_norm_meta;
+		MetadataMap ffn_norm_meta;
 
+		for(auto [key, value]: metadata) {
+			if (key.starts_with("conv.")) {
+            	conv_meta[key.substr(5)] = value; // "conv." ì œì™¸
+			} 
+			else if (key.starts_with("feed_forward.")) {
+            	ffn_meta[key.substr(13)] = value; // "feed_forward." ì œì™¸
+        	} // ... norm ë“± ...
+			else if (key.starts_with("operator_norm.")) {
+				operator_norm_meta[key.substr(14)] = value; // "operator_norm." ì œì™¸
+			}
+			else if (key.starts_with("ffn_norm.")) {
+				ffn_norm_meta[key.substr(9)] = value; // "ffn_norm." ì œì™¸
+			}
+		}
+    
+    conv.load_weights(file, conv_meta);
+    feed_forward->load_weights(file, ffn_meta);
+	operator_norm.load_weights(file, operator_norm_meta);
+	ffn_norm.load_weights(file, ffn_norm_meta);
+	}
+	
 };
 
 class AttentionLayer : public Layer {
 
-	/*
-	ÇÏ³ªÀÇ conv ·¹ÀÌ¾î¿¡ ÇÊ¿äÇÑ °Íµé Á¶¸³
-	ÀÔ·Â->*/
-	//operator_norm  (2048)
-
-	/*self - attention
-	k_layernorm.weight  (64)
-	q_layernorm.weight  (64)
-	key¿Í query¸¦ ¸¸µç Á÷ÈÄ °¢ Çìµå ´ÜÀ§·Î Á¤±ÔÈ­(RMSnorm) °¢ ÇìµåÀÇ Â÷¿øÀº 64 (°¢ Çìµå¿¡ µ¶¸³ÀûÀ¸·Î Á¤±ÔÈ­)
-
-	k_proj.weight (512, 2048)
-	v_proj.weight (512, 2048)
-	ÀÔ·Â º¤ÅÍ(2048)¸¦ key ,value º¤ÅÍ·Î º¯È¯ key, valueÀÇ head°¡ 8°³ÀÌ¹Ç·Î 64*8->512
-
-	q_proj.weight (2048, 2048)
-	ÀÔ·Â º¤ÅÍ(2048)¸¦ query º¤ÅÍ·Î º¯È¯ query head´Â 32°³ ÀÌ¹Ç·Î 64*32 -> 2048
-
-	out_proj.weight	(2048, 2048)
-	32°³ÀÇ attention head °è»ê °á°ú¸¦ ÇÕÄ§
-
-	*/
-	//residual connection
-	//ffn norm -> (2048) feed forward ¿¬»ê¿¡ µé¾î°¡±â Àü¿¡ Àû¿ëµÇ´Â Á¤±ÔÈ­
-	/*feed forward
-	 w1 -> (10752, 2048) ÀÔ·Âº¤ÅÍ(2048)¸¦ Áß°£Â÷¿ø(10752)À¸·Î È®Àå
-	 w2 -> (2048, 10752) Áß°£ °á°ú(10752)¸¦ ´Ù½Ã ¸ğµ¨ÀÇ hidden_size(2048)·Î
-	 w3 -> (10752, 2048) swiglu ¿¬»êÀ» À§ÇØ ¾²ÀÓ(ÀÔ·ÂÀ» w1°ú º´·Ä·Î Ã³¸®)
-	*/
-	//residual connection
-	//output -> next layer
-
-
-	//kvÄ³½Ã -> ´ÙÀ½ ¿¹ÃøÀ» À§ÇØ ÀÌÀü±îÁö ¿¹ÃøÇÑ	 ¹®ÀåÀ» ÀÔ·Â ¹ŞÀ» ¶§ ÀÔ·Â °ª¿¡ ´ëÇØ ÀÌÀü Ãß·Ğ¿¡¼­ ÀÌ¹Ì Çß´ø °è»êÀ» ´Ù½ÃÇØ¾ßÇÔ
-	//-> kvÄ³½Ã¸¦ µÎ¾î kv°è»ê°ª ÀçÈ°¿ë -> kvÄ³½Ã´Â ÇÑ ÅäÅ«À» Ãß·ĞÇÒ ¶§ ¸¶´Ù ±æ¾îÁü -> Ãß·ĞÇÏ¸é¼­ ¾÷µ¥ÀÌÆ®
-
 	string name;
 
-	bs::RMSNorm operation_norm;
+	bs::RMSNorm operator_norm;
 	bs::GQAAttention self_attn;
 	bs::RMSNorm ffn_norm;
 	bs::FFN_SWiGLU feed_forward;
 
-
-
-
 public:
 
-
-
-	AttentionLayer(const string& name_prefix,
-		int hidden_size,
+	AttentionLayer(int hidden_size,
 		int num_attention_heads,
 		int num_key_value_heads,
 		int intermediate_size)
 	{
 		int head_dim = hidden_size / num_attention_heads;
-		name = name_prefix;
-		operation_norm = bs::RMSNorm(name_prefix + ".operator_norm", hidden_size);
-		self_attn = bs::GQAAttention(name_prefix + ".self_attn", hidden_size, num_attention_heads, num_key_value_heads, head_dim);
-		ffn_norm = bs::RMSNorm(name_prefix + ".ffn_norm", hidden_size);
-		feed_forward = bs::FFN_SWiGLU(name_prefix + ".feed_forward", hidden_size, intermediate_size);
+		operator_norm = bs::RMSNorm(hidden_size);
+		self_attn = bs::GQAAttention(hidden_size, num_attention_heads, num_key_value_heads, head_dim);
+		ffn_norm = bs::RMSNorm(hidden_size);
+		feed_forward = bs::FFN_SWiGLU(hidden_size, intermediate_size);
 	}
 
-	datatype forward(datatype x) override {
-		datatype residual = x;
-		x = operation_norm.forward(x);
+	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
+		shared_ptr<bs::Variable> residual = x;
+		x = operator_norm.forward(x);
 		x = self_attn.forward(x, x, x, x);
 		x = add(residual, x);
 
@@ -176,161 +138,149 @@ public:
 		return x;
 	}
 
-	/*
-	void loadWeights(ifstream& file, MetadataMap metadata) override {
-		operation_norm.loadWeights(file, metadata);
-		self_attn.loadWeights(file, metadata);
-		ffn_norm.loadWeights(file, metadata);
-		feed_forward.loadWeights(file, metadata);
-	}*/
+	
+	void loadWeights(ifstream& file, const MetadataMap& metadata) override {
+		MetadataMap self_attn_meta;
+		MetadataMap ffn_meta;
+		MetadataMap operator_norm_meta;
+		MetadataMap ffn_norm_meta;
+
+		for(auto [key, value]: metadata) {
+			if (key.starts_with("self_attn.")) {
+            	conv_meta[key.substr(10)] = value; // "conv." ì œì™¸
+			} 
+			else if (key.starts_with("feed_forward.")) {
+            	ffn_meta[key.substr(13)] = value; // "feed_forward." ì œì™¸
+        	} // ... norm ë“± ...
+			else if (key.starts_with("operator_norm.")) {
+				operator_norm_meta[key.substr(14)] = value; // "operator_norm." ì œì™¸
+			}
+			else if (key.starts_with("ffn_norm.")) {
+				ffn_norm_meta[key.substr(9)] = value; // "ffn_norm." ì œì™¸
+			}
+		}
+    
+    self_attn.load_weights(file, conv_meta);
+    feed_forward.load_weights(file, ffn_meta);
+	operator_norm.load_weights(file, operator_norm_meta);
+	ffn_norm.load_weights(file, ffn_norm_meta);
+	}
 
 };
 
 
-class BongSeek {
+class Model {
 
 	vector<unique_ptr<Layer>> layers;
 	bs::Embedding embedding;
 	bs::RMSNorm embednorm;
-	Rope pe;
+	bs::RoPE pe;
+
+	std::map<int, MetadataMap> weights_by_layer;
+    MetadataMap other_weights;
 public:
 
-	BongSeek(Config config) {
-		//transformer¿¡¼­´Â ÀÔ·ÂÀ¸·Î encoder¿Í decoder ÀÎ½ºÅÏ½º¸¦ ¹ŞÁö¸¸, 
-		//lfm2´Â 30°³ÀÇ layer°¡ ¼ø¼­±îÁö ´Ù Á¤ÇØÁ®ÀÖ¾î¼­ ÀÏ´Ü ³»ºÎÀûÀ¸·Î Á¤ÇØÁöµµ·Ï ¼³Á¤
-
-		embedding = bs::Embedding("model.embed_tokens", config.vocab_size, config.hidden_size);
-		embednorm = bs::RMSNorm("model.embedding_norm", config.hidden_size);
-		pe = Rope(config.hidden_size, config.max_position_embeddings);
+	Model(Config config) {
+		
+		embedding = bs::Embedding(config.vocab_size, config.hidden_size);
+		embednorm = bs::RMSNorm(config.hidden_size);
+		pe = bs:RoPE(config.hidden_size, config.max_position_embeddings);
 
 		int i = 0;
 		for (string type : config.layer_types) {
-			string name = "model.layers." + to_string(i);
+			//string name = "model.layers." + to_string(i);
 			if (type == "conv")
 			{
-				layers.push_back(make_unique<ConvLayer>(name, config.hidden_size,
+				layers.push_back(make_unique<ConvLayer>(config.hidden_size,
 					config.intermediate_size, config.norm_eps));
 			}
 			else if (type == "full_attention")
 			{
-				layers.push_back(make_unique<AttentionLayer>(name, config.hidden_size,
+				layers.push_back(make_unique<AttentionLayer>(config.hidden_size,
 					config.num_attention_heads, config.num_key_value_heads, config.intermediate_size));
 			}
 			i++;
 		}
 	}
 
-	Tensor forward(Tensor x) //input = (¹èÄ¡Å©±â, ÅäÅ«°³¼ö)
+	Tensor forward(Tensor x) 
 	{
-		//embedding -> (¹èÄ¡Å©±â, ÅäÅ«°³¼ö, 2048) Ãâ·Â			W(65536, 2048)
-		//(65536, 2048)¿¡¼­ ÅäÅ« idx¿¡ ÇØ´çÇÏ´Â (2048)Å©±âÀÇ ¿­À» »Ì¾Æ¿È 
+		
 		Tensor embed = embedding.forward(x);
 
 		//embedding norm(2048) -> (batch, token, 2048)			W(2048)
 		embed = embednorm.forward(embed);
 
-		//positional encoding -> (batch, token, 2048)			°¡Á®¿Ã °¡ÁßÄ¡ ¾øÀ½
-
+		//positional encoding -> (batch, token, 2048)			
 		Tensor current = pe.forward(embed);
 
-		//layers ¼ø¼­´ë·Î ¼øÀüÆÄ || ÀÔ·Â Ãâ·ÂÀº (batch, token, 2048)
-		//transformer¿¡¼­´Â N°³ÀÇ encoder decoder¸¦ »ç¿ëÇßÁö¸¸, lfm2´Â ´Ù¸¥ ±¸Á¶
-		//-> encoder, decoder class ´ë½Å¿¡ attention, conv, feedforwardµîÀ» Á¶ÇÕÇÑ convlayer¿Í attention layer¸¦ ¸¸µé¾î »ç¿ë
-
-		cout << endl;
-
+		//layers (batch, token, 2048)
 		for (auto& layer : layers) {
 			current = layer->forward(current);
 			cout << endl;
 		}
 
-		//embedding °¡ÁßÄ¡ ÀçÈ°¿ë -> (batch, token, 65536)
+		//embedding  -> (batch, token, 65536)
 
 
 		return current;
 	}
 
-	/*
+	
 	void load_weights(ifstream& file, MetadataMap metadata)
 	{
-		//safetensors ÀĞ¾î¿Í °¡ÁßÄ¡ ¼³Á¤
+		for (const auto& [key, meta] : all_metadata) {
+        std::vector<std::string> parts = split(key, '.'); // keyë¥¼ '.' ê¸°ì¤€ìœ¼ë¡œ ë¶„ë¦¬
+        
+        if (parts[0] == "model" && parts[1] == "layers") {
+            int layer_idx = std::stoi(parts[2]);
+            // "model.layers.0." ë¶€ë¶„ì„ ì œì™¸í•œ ë‚˜ë¨¸ì§€ í‚¤ë¥¼ ìƒì„±
+            // ì˜ˆ: "self_attn.q_proj.weight"
+            std::string child_key = join(parts.begin() + 3, parts.end(), '.');
+            weights_by_layer[layer_idx][child_key] = meta;
+        } else {
+            other_weights[key] = meta;
+        }
+    }
 
-		//À¯ÀÇ»çÇ×: °¢ layer¿¡ °¡ÁßÄ¡¸¦ Á¢±Ù °¡´ÉÇÑ º¯¼ö·Î µÎ°Å³ª °¡ÁßÄ¡¸¦ ¼³Á¤ÇÒ ¼ö ÀÖ´Â ÇÔ¼ö¸¦ Á¤ÀÇÇØÁÖ¾î¾ß ÇÔ
-		embedding.loadWeights(file, metadata);
-		embednorm.loadWeights(file, metadata);
-		for (auto& layer : layers)
-		{
-			layer->loadWeights(file, metadata);
-		}
-	}*/
+    for (size_t i = 0; i < layers.size(); ++i) {
+        if (weights_by_layer.count(i)) {
+            layers[i]->load_weights(file, weights_by_layer.at(i));
+        }
+    }
+	}
 
 };
 
-
+/*ì¼ë‹¨ ìœ ê¸°
 BongSeek makeModel()
 {
-	//config ÀĞ¾î¿À±â (´ëÃæ ÀÓÀÇ·Î ¸¸µë)
+	//config ï¿½Ğ¾ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½Ç·ï¿½ ï¿½ï¿½ï¿½ï¿½)
 	Config config;
 
-	//model °´Ã¼¸¦ ¸¸µé¾î¼­ return;
+	//model ï¿½ï¿½Ã¼ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½î¼­ return;
 	BongSeek Model(config);
 
-	ifstream file("text.txt");
+	ifstream file("model.safetensors");
 
-	//safetensors ÀĞ°í map ¸¸µé±â (´ëÃæ Å×½ºÆ®¿ë ¸¸µë)
-
-	MetadataMap weights;
-	Metadatainfo x{ 10, 10, {1, 1} };
+	//safetensors ï¿½Ğ°ï¿½ map ï¿½ï¿½ï¿½ï¿½ï¿½ (ï¿½ï¿½ï¿½ï¿½ ï¿½×½ï¿½Æ®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 
 
-	weights.insert({ "model.embed_tokens.weight", x });
-	weights.insert({ "model.embedding_norm.weight", x });
-
-	weights.insert({ "model.layers.0.conv.conv.weight", x });
-	weights.insert({ "model.layers.0.conv.in_proj.weight", x });
-	weights.insert({ "model.layers.0.conv.out_proj.weight", x });
-	weights.insert({ "model.layers.0.feed_forward.w1.weight", x });
-	weights.insert({ "model.layers.0.feed_forward.w2.weight", x });
-	weights.insert({ "model.layers.0.feed_forward.w3.weight", x });
-	weights.insert({ "model.layers.0.ffn_norm.weight", x });
-	weights.insert({ "model.layers.0.operator_norm.weight", x });
-
-	weights.insert({ "model.layers.1.conv.conv.weight", x });
-	weights.insert({ "model.layers.1.conv.in_proj.weight", x });
-	weights.insert({ "model.layers.1.conv.out_proj.weight", x });
-	weights.insert({ "model.layers.1.feed_forward.w1.weight", x });
-	weights.insert({ "model.layers.1.feed_forward.w2.weight", x });
-	weights.insert({ "model.layers.1.feed_forward.w3.weight", x });
-	weights.insert({ "model.layers.1.ffn_norm.weight", x });
-	weights.insert({ "model.layers.1.operator_norm.weight", x });
-
-	weights.insert({ "model.layers.2.feed_forward.w1.weight", x });
-	weights.insert({ "model.layers.2.feed_forward.w2.weight", x });
-	weights.insert({ "model.layers.2.feed_forward.w3.weight", x });
-	weights.insert({ "model.layers.2.ffn_norm.weight", x });
-	weights.insert({ "model.layers.2.operator_norm.weight", x });
-	weights.insert({ "model.layers.2.self_attn.k_layernorm.weight", x });
-	weights.insert({ "model.layers.2.self_attn.k_proj.weight", x });
-	weights.insert({ "model.layers.2.self_attn.out_proj.weight", x });
-	weights.insert({ "model.layers.2.self_attn.q_layernorm.weight", x });
-	weights.insert({ "model.layers.2.self_attn.q_proj.weight", x });
-	weights.insert({ "model.layers.2.self_attn.v_proj.weight", x });
-
-	//¸¸µç model°´Ã¼ load_weights·Î ÇĞ½ÀÀ» ´ë½ÅÇØ °¡ÁßÄ¡ ¼³Á¤
+	//ï¿½ï¿½ï¿½ï¿½ modelï¿½ï¿½Ã¼ load_weightsï¿½ï¿½ ï¿½Ğ½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½Ä¡ ï¿½ï¿½ï¿½ï¿½
 
 
 	//Model.load_weights(file, weights);
 	return Model;
 }
 
-//Ãß·Ğ ¹æ½Ä(°á°ú°ªÁß °¡Àå Å« °ª ¼±ÅÃ)
+//ï¿½ß·ï¿½ ï¿½ï¿½ï¿½(ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å« ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½)
 Tensor greedy_Decode(BongSeek model, Tensor x, Tensor x_mask, int max_len, int start_symbol)
 {
 
-	//°á°ú°ª greedy_decode(65536ÀÇ È®·ü ºĞÆ÷¿¡¼­ °¡Àå Å« °ª »Ì¾Æ
-	// ¿È)
-	//->»ı¼ºÇÒ sequenceÀÇ ÃÖ´ë ±æÀÌ¸¸Å­ ¼øÈ¯ÇÏ¸é¼­ ÀÔ·ÂÀ¸·Î ÀÌÀü±îÁöÀÇ ¿¹Ãø°ªÀ» ³Ö¾îÁÖ¸é¼­ 
-	//»õ·Î¿î ¿¹Ãø°ªÀ»s Ãß°¡ÇØÁØ´Ù. -> ÀÔ·Â ±æÀÌ°¡ ÇÏ³ª¾¿ ´Ã¾î³ª´Â ±¸Á¶
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ greedy_decode(65536ï¿½ï¿½ È®ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ Å« ï¿½ï¿½ ï¿½Ì¾ï¿½
+	// ï¿½ï¿½)
+	//->ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ sequenceï¿½ï¿½ ï¿½Ö´ï¿½ ï¿½ï¿½ï¿½Ì¸ï¿½Å­ ï¿½ï¿½È¯ï¿½Ï¸é¼­ ï¿½Ô·ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½Ö¾ï¿½ï¿½Ö¸é¼­ 
+	//ï¿½ï¿½ï¿½Î¿ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½s ï¿½ß°ï¿½ï¿½ï¿½ï¿½Ø´ï¿½. -> ï¿½Ô·ï¿½ ï¿½ï¿½ï¿½Ì°ï¿½ ï¿½Ï³ï¿½ï¿½ï¿½ ï¿½Ã¾î³ªï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½
 
-	return x;  //Á¤´ä ¿¹Ãø tensor (¹èÄ¡Å©±â, ÅäÅ« °³¼ö)
-}
+	return x;  //ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ tensor (ï¿½ï¿½Ä¡Å©ï¿½ï¿½, ï¿½ï¿½Å« ï¿½ï¿½ï¿½ï¿½)
+}*/

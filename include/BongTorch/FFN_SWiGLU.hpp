@@ -15,13 +15,9 @@ private:
     // W_3 변환을 담당 (다운스케일링)
     std::shared_ptr<Linear> down_linear; 
 
-    string name;
-
 public:
-    FFN_SWiGLU(const string& prefix, int embed_dim, int hidden_dim) {
+    FFN_SWiGLU(int embed_dim, int hidden_dim) {
         // Linear 초기화 및 Module 등록 (편향 사용 여부는 설계에 따라 다름)
-        name = prefix;
-
         gate_linear  = std::make_shared<Linear>(embed_dim, hidden_dim, false);
         value_linear = std::make_shared<Linear>(embed_dim, hidden_dim, false);
         down_linear  = std::make_shared<Linear>(hidden_dim, embed_dim, false);

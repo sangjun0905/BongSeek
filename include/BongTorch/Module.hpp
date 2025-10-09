@@ -56,12 +56,3 @@ public:
 };
 
 } // namespace bs
-
-struct Metadatainfo {
-    size_t offset;
-    size_t size_in_bytes;
-    nb::Shape shape;
-    std::string dtype;
-};
-
-using MetadataMap = map<string, Metadatainfo>;

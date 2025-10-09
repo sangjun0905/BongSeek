@@ -14,7 +14,7 @@ private:
     bool use_bias;
 
 public:
-    Linear(int in_features, int out_features, bool bias = true)
+    Linear(int in_features, int out_features, bool bias = true) 
         : use_bias(bias) 
     {
         // 1. 가중치 W

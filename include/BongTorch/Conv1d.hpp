@@ -43,11 +43,10 @@ private:
     std::shared_ptr<Parameter> b; 
     int stride_, padding_;
     bool use_bias_;
-    string name;
 
 public:
-    Conv1DLayer(const string& prefix, int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0, bool bias = true)
-        : name(prefix), stride_(stride), padding_(padding), use_bias_(bias) 
+    Conv1DLayer(int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0, bool bias = true)
+        : stride_(stride), padding_(padding), use_bias_(bias) 
     {
         std::array<size_t, 3> w_shape = {(size_t)out_channels, (size_t)in_channels, (size_t)kernel_size};
         TensorData W_data = nb::randn(w_shape);

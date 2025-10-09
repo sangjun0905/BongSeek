@@ -100,13 +100,10 @@ private:
     std::shared_ptr<Parameter> weight_;
     std::size_t vocab_size_{0};
     std::size_t embedding_dim_{0};
-    string name;
 
 public:
-    Embedding() {};
-
-    Embedding(const string& prefix, std::size_t vocab_size, std::size_t embedding_dim)
-        : name(prefix), vocab_size_(vocab_size), embedding_dim_(embedding_dim) {
+    Embedding(std::size_t vocab_size, std::size_t embedding_dim)
+        : vocab_size_(vocab_size), embedding_dim_(embedding_dim) {
         TensorShape weight_shape = {vocab_size_, embedding_dim_, 1};
         TensorData weight_data(weight_shape);
         weight_data.fill(0.0f); // 필요하면 랜덤 초기화로 교체

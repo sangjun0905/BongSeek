@@ -1,8 +1,8 @@
 #ifndef GQA_ATTENTION_HPP
 #define GQA_ATTENTION_HPP
 
-#include "Module.hpp"      // Module, Linear, Parameter 정의 포함
-#include "Core.hpp"        // Variable, Function, Add, Mul 등 포함
+#include "module.hpp"      // Module, Linear, Parameter 정의 포함
+#include "core.hpp"        // Variable, Function, Add, Mul 등 포함
 #include "Linear.hpp"
 #include "Softmax.hpp"
 #include "RoPE.hpp"
@@ -17,7 +17,6 @@ private:
     int num_kv_heads_;
     int head_dim_;
     int kv_repeats_;
-    string name;
 
     std::shared_ptr<Linear> WQ_;
     std::shared_ptr<Linear> WK_;
@@ -27,10 +26,8 @@ private:
     std::shared_ptr<RoPE> rope_;
 
 public:
-    GQAAttention() {};
-
-    GQAAttention(const string& prefix, int input_dim, int num_heads, int num_kv_heads, int head_dim)
-        : name(prefix), num_heads_(num_heads), num_kv_heads_(num_kv_heads), head_dim_(head_dim) {
+    GQAAttention(int input_dim, int num_heads, int num_kv_heads, int head_dim)
+        : num_heads_(num_heads), num_kv_heads_(num_kv_heads), head_dim_(head_dim) {
         
         if (num_heads % num_kv_heads != 0) {
             throw std::invalid_argument("num_heads must be divisible by num_kv_heads");
@@ -95,10 +92,7 @@ public:
         auto reshaped_output = nb::reshape(contiguous_output, {B, S, -1});
 
         return (*WO_)(Variable::create(reshaped_output));
-
-        WQ_= 
     }
-
 };
 
 } // namespace bs
