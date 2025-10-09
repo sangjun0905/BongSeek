@@ -7,10 +7,13 @@
 namespace bs {
 
 class RMSNorm : public Module {
+    string name;
 public:
     std::shared_ptr<Parameter> weight;
+    RMSNorm() {};
 
-    RMSNorm(int dim) {
+    RMSNorm(const string& prefix, int dim) {
+        name = prefix;
         weight = Parameter::create(nb::ones({(size_t)dim}));
     }
 

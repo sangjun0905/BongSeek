@@ -1,8 +1,8 @@
 #ifndef GQA_ATTENTION_HPP
 #define GQA_ATTENTION_HPP
 
-#include "module.hpp"      // Module, Linear, Parameter 정의 포함
-#include "core.hpp"        // Variable, Function, Add, Mul 등 포함
+#include "Module.hpp"      // Module, Linear, Parameter 정의 포함
+#include "Core.hpp"        // Variable, Function, Add, Mul 등 포함
 #include "Linear.hpp"
 #include "Softmax.hpp"
 #include "RoPE.hpp"
