@@ -1,22 +1,18 @@
 #pragma once
-#include "Module.hpp"
+#include "Core.hpp"
 #include "Linear.hpp"
-#include "SiLU.hpp" // silu Function 사용
+#include "SiLU.hpp"
 
 namespace bs {
 
 class FFN_SWiGLU : public Module {
 private:
-    // W_1 변환을 담당 (업스케일링)
     std::shared_ptr<Linear> gate_linear; 
-    // W_2 변환을 담당 (업스케일링)
     std::shared_ptr<Linear> value_linear; 
-    // W_3 변환을 담당 (다운스케일링)
     std::shared_ptr<Linear> down_linear; 
 
 public:
     FFN_SWiGLU(int embed_dim, int hidden_dim) {
-        // Linear 초기화 및 Module 등록 (편향 사용 여부는 설계에 따라 다름)
         gate_linear  = std::make_shared<Linear>(embed_dim, hidden_dim, false);
         value_linear = std::make_shared<Linear>(embed_dim, hidden_dim, false);
         down_linear  = std::make_shared<Linear>(hidden_dim, embed_dim, false);
@@ -27,22 +23,22 @@ public:
     }
 
     std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) override {
-        // 1. Gate 경로 (SiLU 적용 경로)
-        auto gate_output = (*gate_linear)(x); // x * W_1
-        auto activated_gate = silu(gate_output); // SiLU(x * W_1)
+        auto gate_output = (*gate_linear)(x);
+        auto activated_gate = silu(gate_output);
         
-        // 2. Value 경로
-        auto value_output = (*value_linear)(x); // x * W_2
+        auto value_output = (*value_linear)(x);
         
-        // 3. 원소별 곱셈 (SWiGLU 핵심)
-        // Variable의 * 연산자 오버로딩 (Mul Function) 사용
-        auto hidden_state = activated_gate * value_output; 
+        auto hidden_state = mul(activated_gate, value_output); 
         
-        // 4. Down Projection
-        auto output = (*down_linear)(hidden_state); // (SiLU(...) * Value) * W_3
+        auto output = (*down_linear)(hidden_state);
 
         return output;
     }
+
+    // Getter methods for testing
+    std::shared_ptr<Linear> get_gate_linear() const { return gate_linear; }
+    std::shared_ptr<Linear> get_value_linear() const { return value_linear; }
+    std::shared_ptr<Linear> get_down_linear() const { return down_linear; }
 };
 
 } // namespace bs
