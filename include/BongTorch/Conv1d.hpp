@@ -8,7 +8,7 @@
 #include "Core.hpp"
 
 namespace bs {
-
+ 
 namespace detail {
 
 inline Tensor conv1d_forward(const Tensor& x,
