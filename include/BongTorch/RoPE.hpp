@@ -8,10 +8,10 @@ namespace bs {
 class RoPE : public Function {
 public:
 
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
-        const TensorData& x = xs[0]; // Input Tensor
-        const TensorData& C = xs[1]; // Cos Component
-        const TensorData& S = xs[2]; // Sin Component 
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
+        const Tensor& x = xs[0]; // Input Tensor
+        const Tensor& C = xs[1]; // Cos Component
+        const Tensor& S = xs[2]; // Sin Component 
 
         // 1. d_k와 d_half 계산 (x의 마지막 축 차원)
         // NOTE: TensorData::shape()가 std::vector<size_t>를 반환하고
@@ -21,18 +21,18 @@ public:
         
         // 2. 텐서 분할 (x_A와 x_B)
         // NOTE: nb::split이 마지막 축을 기준으로 분할한다고 가정합니다.
-        TensorData x_A = nb::split(x, 0, d_half); // 앞쪽 절반 (x_0)
-        TensorData x_B = nb::split(x, 1, d_half); // 뒤쪽 절반 (x_1)
+        Tensor x_A = nb::split(x, 0, d_half); // 앞쪽 절반 (x_0)
+        Tensor x_B = nb::split(x, 1, d_half); // 뒤쪽 절반 (x_1)
 
         // 3. 회전 행렬 적용 (term1, term2 계산)
         // [x_0 * C - x_1 * S]
-        TensorData term1 = (x_A * C) - (x_B * S); 
+        Tensor term1 = (x_A * C) - (x_B * S); 
 
         // [x_1 * C + x_0 * S]
-        TensorData term2 = (x_B * C) + (x_A * S); 
+        Tensor term2 = (x_B * C) + (x_A * S); 
         
         // 4. 결과 텐서 결합 (Concatenation)
-        TensorData y = nb::concat({ term1, term2 }, x.ndim() - 1); // 
+        Tensor y = nb::concat({ term1, term2 }, x.ndim() - 1); // 
 
         return { y };
     }

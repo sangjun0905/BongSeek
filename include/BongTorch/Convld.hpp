@@ -20,7 +20,7 @@ public:
         : stride_(stride), padding_(padding), groups_(groups) {}
 
     // 순전파: nb::conv1d를 사용하여 실제 텐서 연산을 수행합니다.
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         // xs[0] = x (입력), xs[1] = w (가중치)
         return { nb::conv1d(xs[0], xs[1], stride_, padding_, groups_) };
     }
@@ -59,14 +59,14 @@ public:
         std::array<size_t, 3> w_shape = {(size_t)out_channels, (size_t)in_channels, (size_t)kernel_size};
         
         // nb::randn: 랜덤 값으로 채워진 TensorData 생성 (추론 시 이 공간에 가중치가 로드됨)
-        TensorData W_data = nb::randn(w_shape); 
+        Tensor W_data = nb::randn(w_shape); 
         W = Parameter::create(W_data, "weight");
         register_parameter("weight", W);
 
         // 2. 편향 b 초기화 및 등록 (b Shape: {Out_C, 1, 1} - 브로드캐스팅용)
         if (use_bias_) {
             std::array<size_t, 3> b_shape = {(size_t)out_channels, 1, 1};
-            TensorData b_data = nb::randn(b_shape);
+            Tensor b_data = nb::randn(b_shape);
             b = Parameter::create(b_data, "bias");
             register_parameter("bias", b);
         }

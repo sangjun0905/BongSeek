@@ -9,14 +9,13 @@
 #include <set>
 #include <string>
 #include <vector>
-
 #include "../NumBong/Tensor.hpp" 
 
 using TensorValueType = float;
 constexpr std::size_t TensorRank = 3;
-using TensorData = nb::Tensor<TensorValueType, TensorRank>;  // -> TensorData라고 별칭 지정
+using Tensor = nb::Tensor<TensorValueType, TensorRank>;  //
 using Shape = nb::Shape;                                     // ->Shape이라고 별칭 지정(자료형)
-using TensorShape = typename TensorData::shape_type;         // ->Tensor내부에서 공식적으로 사용하는  shape타입 별칭
+using TensorShape = typename Tensor::shape_type;         // ->Tensor내부에서 공식적으로 사용하는  shape타입 별칭
 
 // 역전파 관련 Config, UsingConfig 등 모두 제거됨.
 
@@ -24,13 +23,13 @@ class Function;
 
 class Variable : public std::enable_shared_from_this<Variable> {
 public:
-    TensorData data;
+    Tensor data;
     std::string name;
     // 역전파 관련 멤버 제거: grad, creator, generation
 
-    explicit Variable(const TensorData& arr, const std::string& n = "") : data(arr), name(n) {}
+    explicit Variable(const Tensor& arr, const std::string& n = "") : data(arr), name(n) {}
 
-    static std::shared_ptr<Variable> create(const TensorData& arr, const std::string& n = "") {
+    static std::shared_ptr<Variable> create(const Tensor& arr, const std::string& n = "") {
         return std::make_shared<Variable>(arr, n);
     }//-> 이시점에 tensorA는 이미 만들어진 TensorData
 
@@ -48,13 +47,13 @@ public:
 
     // operator()는 단일 Variable 출력을 반환하도록 수정
     std::shared_ptr<Variable> operator()(const std::vector<std::shared_ptr<Variable>>& in_vars) {
-        std::vector<TensorData> xs;   
+        std::vector<Tensor> xs;   
         xs.reserve(in_vars.size());
         for (const auto& v : in_vars) {
             xs.push_back(v->data);         //_> Variable의 텐서만 뽑아서 담음
         }
 
-        std::vector<TensorData> ys = forward(xs);
+        std::vector<Tensor> ys = forward(xs);
         
         // Function은 오직 하나의 Variable을 출력한다고 가정
         auto out = Variable::create(nb::as_array(ys[0]));
@@ -63,15 +62,15 @@ public:
             }
 
     // forward는 TensorData 기반으로 오버라이딩합니다.
-    virtual std::vector<TensorData> forward(const std::vector<TensorData>& xs) = 0;
+    virtual std::vector<Tensor> forward(const std::vector<Tensor>& xs) = 0;
     
 };
 
 class Parameter : public Variable {
 public:
-    explicit Parameter(const TensorData& arr, const std::string& n = "") : Variable(arr, n) {}
+    explicit Parameter(const Tensor& arr, const std::string& n = "") : Variable(arr, n) {}
 
-    static std::shared_ptr<Parameter> create(const TensorData& arr, const std::string& n = "") {
+    static std::shared_ptr<Parameter> create(const Tensor& arr, const std::string& n = "") {
         return std::make_shared<Parameter>(arr, n);
     }
 };
@@ -79,35 +78,35 @@ public:
 // --- 추론 전용 Function 구현 ---
 class Add : public Function {
 public:
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         return { nb::add(xs[0], xs[1]) };
     }    
 };
 
 class Mul : public Function {
 public:
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         return { nb::mul(xs[0] ,xs[1]) };
     }
 };
 
 class Neg : public Function {
 public:
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         return { nb::neg(xs[0]) };
     }
 };
 
 class Sub : public Function {
 public:
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         return { nb::sub(xs[0] ,xs[1]) };
     }
 };
 
 class Div : public Function {
 public:
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         return { nb::div(xs[0] ,xs[1]) };
     }
 };
@@ -117,7 +116,7 @@ class Pow : public Function {
 public:
     explicit Pow(double cc) : c(cc) {}
 
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         return { nb::pow(xs[0], c) };
     }                           //---> Function을 상속받으므로 Function의 forward오버라이딩 실제 nb::pow()연산 수행
 };

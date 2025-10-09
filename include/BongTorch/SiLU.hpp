@@ -10,17 +10,17 @@ class SiLU : public Function { // bs::Function에서 Function으로 수정
 public:
     // forward: SiLU(x) = x * sigma(x) = x / (1 + exp(-x))
     // xs[0] = x (입력 텐서)
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
-        const TensorData& x = xs[0]; //
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
+        const Tensor& x = xs[0]; //
 
         // 1. exp(-x)
-        TensorData exp_neg_x = nb::exp(-x); // nb::exp 함수가 NumBong.hpp에 정의되어야 함
+        Tensor exp_neg_x = nb::exp(-x); // nb::exp 함수가 NumBong.hpp에 정의되어야 함
 
         // 2. 분모 계산: 1 + exp(-x)
-        TensorData denominator = 1.0 + exp_neg_x;
+        Tensor denominator = 1.0 + exp_neg_x;
 
         // 3. 최종 결과: x / denominator
-        TensorData y = x / denominator;
+        Tensor y = x / denominator;
 
         return { y };
     }

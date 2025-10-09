@@ -16,7 +16,7 @@ private:
     std::size_t vocab_size_{0};
     
 public:
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         const auto& indices = xs[0];
         const auto& weight = xs[1];
 
@@ -33,7 +33,7 @@ public:
         embedding_dim_ = weight_shape[1];
 
         TensorShape out_shape = {batch_size_, seq_len_, embedding_dim_};
-        TensorData output(out_shape);
+        Tensor output(out_shape);
 
         // 2. 임베딩 룩업 (추론 로직)
         for (std::size_t b = 0; b < batch_size_; ++b) {

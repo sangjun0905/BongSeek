@@ -13,10 +13,10 @@ private:
 public:
     PositionEncoding(int max_len, int d_model) : max_len(max_len), d_model(d_model) {}
 
-    TensorData create_pe_array(const TensorData& input_data) {
+    Tensor create_pe_array(const Tensor& input_data) {
         int S = input_data.shape()[1]; // 입력 텐서의 시퀀스 길이
 
-        TensorData P(Shape({(size_t)S, (size_t)d_model}));
+        Tensor P(Shape({(size_t)S, (size_t)d_model}));
 
         for (int pos = 0; pos < S; ++pos) {
             for (int i = 0; i < d_model; ++i) {
@@ -27,11 +27,11 @@ public:
         return P;
     }
 
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
-        TensorData X = xs[0];
-        TensorData P = create_pe_array(X);
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
+        Tensor X = xs[0];
+        Tensor P = create_pe_array(X);
 
-        TensorData Y = X + P;
+        Tensor Y = X + P;
 
         return { Y };
     }

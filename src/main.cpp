@@ -13,7 +13,7 @@ int main() {
     auto model = std::make_shared<Embedding>(vocab, dim);
 
     TensorShape idx_shape = {batch, seq, 1};
-    TensorData idx_data(idx_shape);
+    Tensor idx_data(idx_shape);
     idx_data.fill(0.0f);
 
     idx_data(0, 0, 0) = 1;

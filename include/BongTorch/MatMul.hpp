@@ -8,7 +8,7 @@ namespace bs {
 class MatMul : public Function {
 public:
     // Function::forward 오버라이딩
-    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+    std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         // nb::Tensor::matmul을 사용하여 행렬 곱셈을 수행합니다.
         // xs[0] @ xs[1]
         return { xs[0].matmul(xs[1]) };
