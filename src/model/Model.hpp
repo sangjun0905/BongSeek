@@ -8,34 +8,28 @@
 #include "Config.hpp"
 #include "../NumBong/Tensor.hpp"
 #include "../BongTorch/Module.hpp"
+#include "../BongTorch/Core.hpp"
 #include "../BongTorch/GQAAttention.hpp"
 #include "../BongTorch/RMSNorm.hpp"
 #include "../BongTorch/FFN_SWiGLU.hpp"
-#include "../BongTorch/Conv1d.hpp"
+#include "../BongTorch/Convld.hpp"
 #include "../BongTorch/Embedding.hpp"
 #include "../BongTorch/RoPE.hpp"
 
 using namespace std;
 
-typedef shared_ptr<bs::Variable> datatype;
+typedef shared_ptr<Variable> datatype;
 
-struct Metadatainfo {
-	size_t offset_start;
-	size_t offset_end;
-	nb::Shape shape;
-	std::string dtype;
-};
 
-using MetadataMap = map<string, Metadatainfo>;
 
 class Layer {
 public:
 	virtual ~Layer() = default;
-	virtual shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x)
+	virtual shared_ptr<Variable> forward(shared_ptr<Variable> x)
 	{
 		return x;
 	};
-	virtual void loadWeights(ifstream& file, const MetadataMap& metadata) = 0;
+	virtual void loadWeights(istream& file, const MetadataMap& metadata) = 0;
 
 };
 
@@ -45,7 +39,7 @@ class ConvLayer : public Layer {
 
 	string name;
 	bs::RMSNorm operator_norm;
-	bs::Conv1DLayer conv;
+	bs::ConvldLayer conv;
 	bs::RMSNorm ffn_norm;
 	bs::FFN_SWiGLU feed_forward;
 public:
@@ -54,13 +48,13 @@ public:
 		int intermediate_size)
 	{
 		operator_norm = bs::RMSNorm(hidden_size);
-		conv = bs::Conv1DLayer(hidden_size, hidden_size, 3);  //나중에 한번 더 재확인
+		conv = bs::ConvldLayer(hidden_size, hidden_size, 3);  //나중에 한번 더 재확인
 		ffn_norm = bs::RMSNorm(hidden_size);
 		feed_forward = bs::FFN_SWiGLU(hidden_size, intermediate_size);
 	}
 
-	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
-		shared_ptr<bs::Variable> residual = x;
+	shared_ptr<Variable> forward(shared_ptr<Variable> x) override {
+		shared_ptr<Variable> residual = x;
 		x = operator_norm.forward(x);
 		x = conv.forward(x);
 		x = add(residual, x);
@@ -73,7 +67,7 @@ public:
 	}
 
 	
-	void loadWeights(ifstream& file, const MetadataMap& metadata) override {
+	void loadWeights(istream& file, const MetadataMap& metadata) override {
 		MetadataMap conv_meta;
 		MetadataMap ffn_meta;
 		MetadataMap operator_norm_meta;
@@ -125,8 +119,8 @@ public:
 		feed_forward = bs::FFN_SWiGLU(hidden_size, intermediate_size);
 	}
 
-	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
-		shared_ptr<bs::Variable> residual = x;
+	shared_ptr<Variable> forward(shared_ptr<Variable> x) override {
+		shared_ptr<Variable> residual = x;
 		x = operator_norm.forward(x);
 		x = self_attn.forward(x);
 		x = add(residual, x);
@@ -139,7 +133,7 @@ public:
 	}
 
 	
-	void loadWeights(ifstream& file, const MetadataMap& metadata) override {
+	void loadWeights(istream& file, const MetadataMap& metadata) override {
 		MetadataMap self_attn_meta;
 		MetadataMap ffn_meta;
 		MetadataMap operator_norm_meta;
@@ -203,16 +197,17 @@ public:
 		}
 	}
 
-	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) 
+	/*
+	shared_ptr<Variable> forward(shared_ptr<Variable> x) 
 	{
 		
-		shared_ptr<bs::Variable> embed = embedding.forward(x);
+		shared_ptr<Variable> embed = embedding.forward(x);
 
 		//embedding norm(2048) -> (batch, token, 2048)			W(2048)
 		embed = embednorm.forward(embed);
 
 		//positional encoding -> (batch, token, 2048)			
-		shared_ptr<bs::Variable> current = pe.forward(embed);
+		shared_ptr<Variable> current = pe.forward(embed);
 
 		//layers (batch, token, 2048)
 		for (auto& layer : layers) {
@@ -224,11 +219,12 @@ public:
 
 
 		return current;
-	}
+	}*/
 
 	
-	void load_weights(ifstream& file, MetadataMap metadata)
+	void load_weights(istream& file, MetadataMap metadata)
 	{
+
 		for (const auto& [key, meta] : metadata) {
     
         if (key.substr(0, 13)=="model.layers.") {
@@ -242,11 +238,27 @@ public:
         }
     }
 
-    for (size_t i = 0; i < layers.size(); ++i) {
-        if (weights_by_layer.count(i)) {
-            layers[i]->loadWeights(file, weights_by_layer.at(i));
-        }
-    }
+    	for (size_t i = 0; i < layers.size(); ++i) {
+        	if (weights_by_layer.count(i)) {
+            	layers[i]->loadWeights(file, weights_by_layer.at(i));
+        	}
+  		}
+		
+		for (auto& [key, value] : other_weights) {
+			if( key.compare(0, 19, "model.embed_tokens.") == 0) {
+				MetadataMap embed_meta;
+				embed_meta[key.substr(19)] = value; // "model.embed_tokens." 제외
+				embedding.loadWeights(file, embed_meta);
+			}
+			else if (key.compare(0, 21, "model.embedding_norm.")==0){
+				MetadataMap embednorm_meta;
+				embednorm_meta[key.substr(21)] = value; // "model.embedding_norm." 제외
+				embednorm.loadWeights(file, embednorm_meta);
+			} 
+		}
+		cout<<"all weights loaded"<<endl;
+	
+
 	}
 
 };

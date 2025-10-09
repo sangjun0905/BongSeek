@@ -17,6 +17,13 @@ public:
     std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) override {
         return rms_norm(x, weight);
     }
+
+    void loadWeights(std::istream& file, const MetadataMap& metadata)
+    {
+        long long startoffset = metadata.at("weight").offset_start;
+        long long endoffset = metadata.at("weight").offset_end;
+        weight->data.loadWeight(file, startoffset, endoffset);
+    }
 };
 
 } // namespace bs

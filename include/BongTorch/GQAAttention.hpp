@@ -1,8 +1,8 @@
 #ifndef GQA_ATTENTION_HPP
 #define GQA_ATTENTION_HPP
 
-#include "module.hpp"      // Module, Linear, Parameter 정의 포함
-#include "core.hpp"        // Variable, Function, Add, Mul 등 포함
+#include "Module.hpp"      // Module, Linear, Parameter 정의 포함
+#include "Core.hpp"        // Variable, Function, Add, Mul 등 포함
 #include "Linear.hpp"
 #include "Softmax.hpp"
 #include "RoPE.hpp"
@@ -26,6 +26,8 @@ private:
     std::shared_ptr<RoPE> rope_;
 
 public:
+    GQAAttention() {};
+
     GQAAttention(int input_dim, int num_heads, int num_kv_heads, int head_dim)
         : num_heads_(num_heads), num_kv_heads_(num_kv_heads), head_dim_(head_dim) {
         
@@ -92,7 +94,48 @@ public:
         auto reshaped_output = nb::reshape(contiguous_output, {B, S, -1});
 
         return (*WO_)(Variable::create(reshaped_output));
+
+        WQ_= 
     }
+
+    void loadWeights(std::istream& file, const MetadataMap& metadata){
+        MetadataMap WQ_meta;
+        MetadataMap WK_meta;
+        MetadataMap WV_meta;
+        MetadataMap WO_meta;
+        MetadataMap k_layernorm_meta; // normalization 구현 시 weight추가
+        MetadataMap q_layernorm_meta; // normalization 구현 시 weight추가
+
+        for(auto& [key, value] : metadata) {
+            if(key.compare(0, 7, "q_proj.") == 0) {
+                WQ_meta[key.substr(7)] = value; 
+            } 
+            else if (key.compare(0, 7, "k_proj.") == 0) {
+                WK_meta[key.substr(7)] = value; 
+            } 
+            else if (key.compare(0, 7, "v_proj.") == 0) {
+                WV_meta[key.substr(7)] = value; 
+            } 
+            else if (key.compare(0, 9, "out_proj.") == 0) {
+                WO_meta[key.substr(9)] = value; 
+            } 
+            else if (key.compare(0, 15, "k_layernorm.") == 0) {
+                k_layernorm_meta[key.substr(15)] = value; // normalization 구현 시 weight추가
+            }
+            else if (key.compare(0, 15, "q_layernorm.") == 0) {
+                q_layernorm_meta[key.substr(15)] = value; // normalization 구현 시 weight추가
+            }
+            // normalization 구현 시 weight추가
+            
+        }
+
+        WQ_->loadWeights(file, WQ_meta);
+        WK_->loadWeights(file, WK_meta);
+        WV_->loadWeights(file, WV_meta);
+        WO_->loadWeights(file, WO_meta);
+        // normalization 구현 시 weight추가
+    }
+
 };
 
 } // namespace bs

@@ -1,15 +1,11 @@
 #pragma once
 
-#include "module.hpp" 
-#include "core.hpp"   
-#include <cmath>      
+#include "Core.hpp"
 #include "Softmax.hpp"
+#include "Linear.hpp"
+#include <cmath>      
 
 namespace bs {
-
-// ---------------------------------------------
-// SelfAttentionLayer Module 구현
-// ---------------------------------------------
 
 class SelfAttentionLayer : public Module {
 private:
