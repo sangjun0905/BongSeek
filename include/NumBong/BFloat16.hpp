@@ -97,4 +97,3 @@ static_assert(sizeof(BFloat16) == 2, "BFloat16 must occupy 16 bits");
 static_assert(std::is_trivially_copyable_v<BFloat16>, "BFloat16 must be trivially copyable");
 
 } // namespace nb
-
