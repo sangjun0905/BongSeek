@@ -1,20 +1,22 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <set>
 #include <string>
 #include <vector>
-
 #include "../NumBong/Tensor.hpp"
+
+namespace bs {
 
 using TensorValueType = float;
 constexpr std::size_t TensorRank = 3;
 using TensorData = nb::Tensor<TensorValueType, TensorRank>;
-using Shape = nb::Shape;
 using TensorShape = typename TensorData::shape_type;
+using Shape = std::vector<std::size_t>; // For compatibility with old code, but prefer TensorShape
 
 struct Config {
     static inline bool enable_backprop = true;
@@ -33,7 +35,7 @@ private:
 inline UsingConfig no_grad() { return UsingConfig(Config::enable_backprop, false); }
 inline UsingConfig test_mode() { return UsingConfig(Config::train, false); }
 
-class Function;
+class Function; // Forward declaration
 
 class Variable : public std::enable_shared_from_this<Variable> {
 public:
@@ -49,10 +51,10 @@ public:
         return std::make_shared<Variable>(arr, n);
     }
 
-    Shape shape() const { return data.shape_vector(); }
+    TensorShape shape() const { return data.getShape(); }
     int ndim() const { return static_cast<int>(data.ndim()); }
-    std::size_t size() const { return data.size(); }
-    std::string dtype() const { return data.dtype(); }
+    size_t size() const { return data.size(); }
+    const char* dtype() const { return data.dtype(); }
 
     void set_creator(const std::shared_ptr<Function>& f);
     void unchain() { creator.reset(); }
@@ -82,9 +84,11 @@ public:
 
         std::vector<TensorData> xs;
         xs.reserve(inputs.size());
-        for (const auto& v : inputs) xs.push_back(v->data);
+        for (const auto& v : inputs) {
+            xs.push_back(v->data);
+        }
 
-        auto ys = forward(xs);
+        std::vector<TensorData> ys = forward(xs);
 
         std::vector<std::shared_ptr<Variable>> out_vars;
         out_vars.reserve(ys.size());
@@ -129,10 +133,9 @@ inline void Variable::backward(bool retain_grad, bool create_graph) {
         if (!f) return;
         if (seen.insert(f.get()).second) {
             funcs.push_back(f);
-            std::sort(funcs.begin(), funcs.end(),
-                      [](const std::shared_ptr<Function>& a, const std::shared_ptr<Function>& b) {
-                          return a->generation < b->generation;
-                      });
+            std::sort(funcs.begin(), funcs.end(), [](const std::shared_ptr<Function>& a, const std::shared_ptr<Function>& b) {
+                return a->generation < b->generation;
+            });
         }
     };
 
@@ -153,7 +156,7 @@ inline void Variable::backward(bool retain_grad, bool create_graph) {
             UsingConfig tmp(Config::enable_backprop, create_graph);
             auto gxs = f->backward(gys);
 
-            for (std::size_t i = 0; i < f->inputs.size(); ++i) {
+            for (size_t i = 0; i < f->inputs.size(); ++i) {
                 auto x = f->inputs[i];
                 auto gx = (i < gxs.size() ? gxs[i] : nullptr);
                 if (!gx) continue;
@@ -198,25 +201,15 @@ public:
     }
 };
 
+// --- Basic Functions ---
+
 class Add : public Function {
-    TensorShape x0_shape{};
-    TensorShape x1_shape{};
 public:
     std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
-        x0_shape = xs[0].getShape();
-        x1_shape = xs[1].getShape();
         return { xs[0] + xs[1] };
     }
-
     std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
-        auto gy = gys[0];
-        auto gx0 = Variable::create(gy->data);
-        auto gx1 = Variable::create(gy->data);
-        if (!(x0_shape == x1_shape)) {
-            gx0->data = nb::sum_to(gx0->data, x0_shape);
-            gx1->data = nb::sum_to(gx1->data, x1_shape);
-        }
-        return { gx0, gx1 };
+        return { gys[0], gys[0] };
     }
 };
 
@@ -240,9 +233,80 @@ public:
     }
 };
 
+class Neg : public Function {
+public:
+    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+        return { -xs[0] };
+    }
+
+    std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
+        auto gy = gys[0];
+        return { Variable::create(-gy->data) };
+    }
+};
+
+class Sub : public Function {
+    TensorShape x0_shape, x1_shape;
+public:
+    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+        x0_shape = xs[0].getShape();
+        x1_shape = xs[1].getShape();
+        return { xs[0] - xs[1] };
+    }
+
+    std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
+        auto gy = gys[0];
+        auto gx0 = Variable::create(gy->data);
+        auto gx1 = Variable::create(-gy->data);
+        if (!(x0_shape == x1_shape)) {
+            gx0->data = nb::sum_to(gx0->data, x0_shape);
+            gx1->data = nb::sum_to(gx1->data, x1_shape);
+        }
+        return { gx0, gx1 };
+    }
+};
+
+class Div : public Function {
+public:
+    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+        return { xs[0] / xs[1] };
+    }
+
+    std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
+        auto x0 = inputs[0];
+        auto x1 = inputs[1];
+        auto gy = gys[0];
+        auto gx0 = Variable::create(gy->data / x1->data);
+        auto gx1 = Variable::create(gy->data * (-x0->data / (x1->data * x1->data)));
+        if (!(x0->data.getShape() == x1->data.getShape())) {
+            gx0->data = nb::sum_to(gx0->data, x0->data.getShape());
+            gx1->data = nb::sum_to(gx1->data, x1->data.getShape());
+        }
+        return { gx0, gx1 };
+    }
+};
+
+class Pow : public Function {
+    double c;
+public:
+    explicit Pow(double cc) : c(cc) {}
+
+    std::vector<TensorData> forward(const std::vector<TensorData>& xs) override {
+        return { nb::pow(xs[0], c) };
+    }
+
+    std::vector<std::shared_ptr<Variable>> backward(const std::vector<std::shared_ptr<Variable>>& gys) override {
+        auto x = inputs[0];
+        auto gy = gys[0];
+        auto gx = Variable::create(c * nb::pow(x->data, c - 1.0) * gy->data);
+        return { gx };
+    }
+};
+
 inline std::shared_ptr<Variable> add(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
     auto f = std::make_shared<Add>();
-    return (*f)(std::vector<std::shared_ptr<Variable>>{a, b})[0];
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{a, b});
+    return outs[0];
 }
 
 inline std::shared_ptr<Variable> operator+(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
@@ -251,9 +315,69 @@ inline std::shared_ptr<Variable> operator+(const std::shared_ptr<Variable>& a, c
 
 inline std::shared_ptr<Variable> mul(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
     auto f = std::make_shared<Mul>();
-    return (*f)(std::vector<std::shared_ptr<Variable>>{a, b})[0];
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{a, b});
+    return outs[0];
 }
 
 inline std::shared_ptr<Variable> operator*(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
     return mul(a, b);
 }
+
+inline std::shared_ptr<Variable> neg(const std::shared_ptr<Variable>& a) {
+    auto f = std::make_shared<Neg>();
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{a});
+    return outs[0];
+}
+
+inline std::shared_ptr<Variable> operator-(const std::shared_ptr<Variable>& a) {
+    return neg(a);
+}
+
+inline std::shared_ptr<Variable> sub(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
+    auto f = std::make_shared<Sub>();
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{a, b});
+    return outs[0];
+}
+
+inline std::shared_ptr<Variable> operator-(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
+    return sub(a, b);
+}
+
+inline std::shared_ptr<Variable> divv(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
+    auto f = std::make_shared<Div>();
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{a, b});
+    return outs[0];
+}
+
+inline std::shared_ptr<Variable> operator/(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
+    return divv(a, b);
+}
+
+inline std::shared_ptr<Variable> powv(const std::shared_ptr<Variable>& a, double c) {
+    auto f = std::make_shared<Pow>(c);
+    auto outs = (*f)(std::vector<std::shared_ptr<Variable>>{a});
+    return outs[0];
+}
+
+inline std::shared_ptr<Variable> operator^(const std::shared_ptr<Variable>& a, double c) {
+    return powv(a, c);
+}
+
+inline void demo() {
+    TensorData a({3, 3, 3});
+    TensorData b({3, 3, 3});
+
+    auto A = Variable::create(a, "A");
+    auto B = Variable::create(b, "B");
+
+    auto C = add(mul(A, B), A);
+    C->print("C: ");
+    C->backward();
+    if (A->grad) {
+        std::cout << "A.grad shape: " << A->grad->data.shape_string() << "\n";
+    } else {
+        std::cout << "A.grad none\n";
+    }
+}
+
+} // namespace bs

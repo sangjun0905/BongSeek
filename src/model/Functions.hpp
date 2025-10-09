@@ -8,6 +8,8 @@
 #include <map>
 #include <fstream>
 #include "Config.hpp"
+#include "Tensor.hpp"
+#include "json.hpp"
 
 using namespace Eigen;
 
@@ -15,17 +17,18 @@ typedef vector<MatrixXd> Tensor;
 struct Metadatainfo {
 	size_t offset;
 	size_t size_in_bytes;
-	std::vector<size_t> shape;
+	nb::Shape shape;
+	std::string dtype;
 };
 
 using MetadataMap = map<string, Metadatainfo>;
 
-//testìš© í”„ë¦°íŠ¸ í•¨ìˆ˜	
+//test¿ë ÇÁ¸°Æ® ÇÔ¼ö	
 //void testprint(string str);
 
 Tensor add(Tensor x, Tensor y);
 
-//í–‰ë ¬ê³±(ê°€ì¤‘ì¹˜)
+//Çà·Ä°ö(°¡ÁßÄ¡)
 class Linear {
 	Tensor weight;
 	string name;
@@ -46,14 +49,14 @@ public:
 			auto data = metadata.at(key);
 			//testprint((name+".weight"));
 			/*
-			// 1. ë©”íƒ€ë°ì´í„°ë¥¼ ê¸°ë°˜ìœ¼ë¡œ í…ì„œ ë©”ëª¨ë¦¬ í• ë‹¹
+			// 1. ¸ÞÅ¸µ¥ÀÌÅÍ¸¦ ±â¹ÝÀ¸·Î ÅÙ¼­ ¸Þ¸ð¸® ÇÒ´ç
             this->weight.shape = meta.shape;
             this->weight.allocate(meta.size_in_bytes);
 
-            // 2. íŒŒì¼ í¬ì¸í„°ë¥¼ ê°€ì¤‘ì¹˜ ìœ„ì¹˜ë¡œ ì´ë™ (seek)
+            // 2. ÆÄÀÏ Æ÷ÀÎÅÍ¸¦ °¡ÁßÄ¡ À§Ä¡·Î ÀÌµ¿ (seek)
             file.seekg(meta.offset);
 
-            // 3. íŒŒì¼ì—ì„œ ë°ì´í„°ë¥¼ ì§ì ‘ í…ì„œì˜ ë©”ëª¨ë¦¬ë¡œ ì½ì–´ì˜´ (read)
+            // 3. ÆÄÀÏ¿¡¼­ µ¥ÀÌÅÍ¸¦ Á÷Á¢ ÅÙ¼­ÀÇ ¸Þ¸ð¸®·Î ÀÐ¾î¿È (read)
             file.read(this->weight.data.data(), meta.size_in_bytes);
 			
 			*/
@@ -68,7 +71,7 @@ public:
 
 };
 
-//ìž„ë² ë”©
+//ÀÓº£µù
 class Embedding{
 
 	Linear embed_tokens;
@@ -114,13 +117,13 @@ public:
 	}
 };
 
-//ì •ê·œí™”
-class RMSNorm
+//Á¤±ÔÈ­
+class RMSNormal
 {
 	string name;
 	int hiddensize;
 	double eps;
-	Linear normweight; //Gain(Î³) -> scale íŒŒë¼ë¯¸í„°
+	Linear normweight; //Gain(¥ã) -> scale ÆÄ¶ó¹ÌÅÍ
 	
 public:
 	RMSNorm() {};
@@ -141,7 +144,7 @@ public:
 	{
 		//testprint("Normalization");
 		cout << "Normalization" << endl;
-		/*ì •ê·œí™”*/
+		/*Á¤±ÔÈ­*/
 		return x;
 	};
 
@@ -149,7 +152,7 @@ public:
 
 };
 
-//key, valueë¥¼ ë¬¶ì–´ì„œ í•˜ëŠ” GQA
+//key, value¸¦ ¹­¾î¼­ ÇÏ´Â GQA
 class GroupedQueryAttention {
 	//GroupedQueryAttention();
 	string name;
@@ -166,12 +169,12 @@ class GroupedQueryAttention {
 	RMSNorm q_layernorm;
 	Linear out_proj;
 
-	//kvìºì‹œ
+	//kvÄ³½Ã
 	Tensor Kcache;
 	Tensor Vcache;
 	void casheupdate(Tensor& Knew, Tensor& Vnew)
 	{
-		//ê¸°ì¡´ kv ìºì‹œì— ìƒˆë¡œìš´ ìºì‹œ ì¶”ê°€
+		//±âÁ¸ kv Ä³½Ã¿¡ »õ·Î¿î Ä³½Ã Ãß°¡
 	}
 
 
@@ -215,12 +218,12 @@ public:
 //residual connection
 class sublayerconnection{ };
 
-//Swiglu í™œì„±í™”í•¨ìˆ˜ë¥¼ ì“°ëŠ” feed forward
+//Swiglu È°¼ºÈ­ÇÔ¼ö¸¦ ¾²´Â feed forward
 class SwigluFeedforward {
 	/*feed forward
-	 w1 -> (10752, 2048) ìž…ë ¥ë²¡í„°(2048)ë¥¼ ì¤‘ê°„ì°¨ì›(10752)ìœ¼ë¡œ í™•ìž¥
-	 w2 -> (2048, 10752) ì¤‘ê°„ ê²°ê³¼(10752)ë¥¼ ë‹¤ì‹œ ëª¨ë¸ì˜ hidden_size(2048)ë¡œ
-	 w3 -> (10752, 2048) swiglu ì—°ì‚°ì„ ìœ„í•´ ì“°ìž„(ìž…ë ¥ì„ w1ê³¼ ë³‘ë ¬ë¡œ ì²˜ë¦¬)
+	 w1 -> (10752, 2048) ÀÔ·Âº¤ÅÍ(2048)¸¦ Áß°£Â÷¿ø(10752)À¸·Î È®Àå
+	 w2 -> (2048, 10752) Áß°£ °á°ú(10752)¸¦ ´Ù½Ã ¸ðµ¨ÀÇ hidden_size(2048)·Î
+	 w3 -> (10752, 2048) swiglu ¿¬»êÀ» À§ÇØ ¾²ÀÓ(ÀÔ·ÂÀ» w1°ú º´·Ä·Î Ã³¸®)
 	*/
 	Linear w1;
 	Linear w2;
@@ -237,14 +240,14 @@ public:
 	{
 		this->name = prefix;
 		this->hidden_size = hidden_size;
-		this->intermediate_size = intermediate_size;  //feedforward ì¤‘ê°„ ì€ë‹‰ì¸µ í¬ê¸°
+		this->intermediate_size = intermediate_size;  //feedforward Áß°£ Àº´ÐÃþ Å©±â
 		w1 = Linear(prefix+ ".w1");
 		w2 = Linear(prefix+ ".w2");
 		w3 = Linear(prefix+ ".w3");
 	}
 	
 	void loadWeights(ifstream& file, MetadataMap metadata) {
-		//ê°€ì¤‘ì¹˜
+		//°¡ÁßÄ¡
 		w1.loadWeights(file, metadata);
 		w2.loadWeights(file, metadata);
 		w3.loadWeights(file, metadata);
@@ -264,9 +267,9 @@ public:
 class Convolution {
 
 	/*convlayer
-	(6144, 2048) -> conv ì „ì— 2048 ìž…ë ¥ ë²¡í„°ë¥¼ 6144ë¡œ íˆ¬ì˜projection(2048*3 =6144)
-	(2048, 1, 3) -> 1d depth convolution(ì±„ë„ ìˆ˜, 1, ì»¤ë„ í¬ê¸°) ì±„ë„ ìˆ˜*ì»¤ë„ í¬ê¸° =6144
-	(2048, 2048) -> conv ì—°ì‚°ì„ í†µí•´ ì²˜ë¦¬ëœ ê²°ê³¼ë¥¼ ë‹¤ì‹œ í•œë²ˆ ì¡°í•©í•˜ê³  ì •ë¦¬í•˜ì—¬ ìµœì¢… ì¶œë ¥(2048)ë¡œ ë§Œë“œëŠ” íˆ¬ì˜
+	(6144, 2048) -> conv Àü¿¡ 2048 ÀÔ·Â º¤ÅÍ¸¦ 6144·Î Åõ¿µprojection(2048*3 =6144)
+	(2048, 1, 3) -> 1d depth convolution(Ã¤³Î ¼ö, 1, Ä¿³Î Å©±â) Ã¤³Î ¼ö*Ä¿³Î Å©±â =6144
+	(2048, 2048) -> conv ¿¬»êÀ» ÅëÇØ Ã³¸®µÈ °á°ú¸¦ ´Ù½Ã ÇÑ¹ø Á¶ÇÕÇÏ°í Á¤¸®ÇÏ¿© ÃÖÁ¾ Ãâ·Â(2048)·Î ¸¸µå´Â Åõ¿µ
 	*/
 	Linear in_proj;
 	Linear conv;
@@ -304,6 +307,6 @@ public:
 
 class Generator {
 
-	//ë§ˆì§€ë§‰ ë³€í™˜ 2048 -> 65536
-	//ì²« embedding ê°€ì¤‘ì¹˜ ìž¬í™œìš©
+	//¸¶Áö¸· º¯È¯ 2048 -> 65536
+	//Ã¹ embedding °¡ÁßÄ¡ ÀçÈ°¿ë
 };

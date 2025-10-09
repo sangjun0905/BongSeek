@@ -1,10 +1,11 @@
-#ifndef MODULE_HPP
-#define MODULE_HPP
+#pragma once
 
-#include "core.hpp"
+#include "Core.hpp"
 #include <map>
 #include <vector>
 #include <memory>
+
+namespace bs {
 
 class Module : public std::enable_shared_from_this<Module> {
 private:
@@ -54,4 +55,13 @@ public:
     }
 };
 
-#endif // MODULE_HPP
+} // namespace bs
+
+struct Metadatainfo {
+    size_t offset;
+    size_t size_in_bytes;
+    nb::Shape shape;
+    std::string dtype;
+};
+
+using MetadataMap = map<string, Metadatainfo>;

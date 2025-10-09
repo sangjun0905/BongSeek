@@ -1,7 +1,7 @@
 
 #include "Functions.hpp"
 
-//testìš© í”„ë¦°íŠ¸ í•¨ìˆ˜
+//test¿ë ÇÁ¸°Æ® ÇÔ¼ö
 /*
 void testprint(string str)
 {
@@ -14,10 +14,11 @@ void testprint(string str)
 /*
 Tensor makemask(Tensor x, double pad)
 {
-	//ë§ˆìŠ¤í¬ ë§Œë“¤ê¸°
+	//¸¶½ºÅ© ¸¸µé±â
 	return x;
 }*/
 Tensor add(Tensor x, Tensor y) {
 	cout << "residual connection" << endl;
 	return x;
 }
+
