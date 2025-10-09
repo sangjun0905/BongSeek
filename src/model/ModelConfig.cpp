@@ -2,9 +2,11 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <stdexcept>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
+namespace fs = std::filesystem;
 
 namespace {
 std::vector<std::string> read_string_array(const json& data, const char* key) {
@@ -19,10 +21,37 @@ std::vector<std::string> read_string_array(const json& data, const char* key) {
 }
 } // namespace
 
-bool ModelConfig::load(const std::string& path) {
-    std::ifstream file(path);
+ModelConfig::ModelConfig(const fs::path& json_source) {
+    const fs::path target = resolve_config_path(json_source);
+    if (!load(target)) {
+        throw std::runtime_error("[ModelConfig] Failed to load config: " + target.string());
+    }
+}
+
+fs::path ModelConfig::resolve_config_path(const fs::path& base) const {
+    if (base.empty()) {
+        return fs::path("src/model/sample_data/sample_config.json");
+    }
+    if (fs::is_directory(base)) {
+        return fs::weakly_canonical(base / "config.json");
+    }
+    return fs::weakly_canonical(base);
+}
+
+bool ModelConfig::load(const fs::path& path) {
+    return load(path.string());
+}
+
+bool ModelConfig::load(const std::string& path) {  // config.json 파일 경로
+    const fs::path target = path;
+    if (!fs::exists(target)) {
+        std::cerr << "[ModelConfig] 파일 읽기 실패: " << target.string() << std::endl;
+        return false;
+    }
+
+    std::ifstream file(target);
     if (!file.is_open()) {
-        std::cerr << "[ModelConfig] 파일 읽기 실패: " << path << std::endl;
+        std::cerr << "[ModelConfig] 파일 읽기 실패: " << target.string() << std::endl;
         return false;
     }
 

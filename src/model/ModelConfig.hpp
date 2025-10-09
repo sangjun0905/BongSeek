@@ -1,10 +1,16 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
 class ModelConfig {
 public:
+    ModelConfig() = default;
+    explicit ModelConfig(const std::filesystem::path& json_source);
+    explicit ModelConfig(const std::string& json_source)
+        : ModelConfig(std::filesystem::path(json_source)) {}
+
     std::vector<std::string> architectures;
     bool block_auto_adjust_ff_dim = false;
     int block_dim = 0;
@@ -45,4 +51,8 @@ public:
     int vocab_size = 0;
 
     bool load(const std::string& path);
+    bool load(const std::filesystem::path& path);
+
+private:
+    std::filesystem::path resolve_config_path(const std::filesystem::path& base) const;
 };

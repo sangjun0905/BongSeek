@@ -29,7 +29,7 @@ bool WeightLoader::load(const std::string& path) {
 
     json header = json::parse(header_str);
 
-    for (auto& [name, meta] : header.items()) {
+    for (auto& [name, meta] : header.items()) { // 텐서 헤더 항목 순회
         TensorInfo info;
         info.dtype = meta["dtype"].get<std::string>();
         for (auto& d : meta["shape"]) info.shape.push_back(d.get<size_t>());
@@ -52,7 +52,7 @@ std::vector<float> WeightLoader::get(const std::string& tensor_name) {
     const auto& info = tensor_map[tensor_name];
     size_t bytes = info.offset_end - info.offset_start;
 
-    std::vector<float> data;
+    std::vector<float> data; // 바이너리 데이터 저장된 벡터
     file.seekg(4 + info.offset_start, std::ios::beg);
 
     if (info.dtype == "F32") {
