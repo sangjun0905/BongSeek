@@ -75,7 +75,10 @@
     "xstring": "cpp",
     "xtr1common": "cpp",
     "xtree": "cpp",
-    "xutility": "cpp"
+    "xutility": "cpp",
+    "iomanip": "cpp",
+    "stop_token": "cpp",
+    "thread": "cpp"
   },
   "C_Cpp_Runner.msvcBatchPath": "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Auxiliary/Build/vcvarsall.bat"
 }

@@ -1,7 +1,7 @@
 #include <iostream>
 #include <iomanip>
 #include "BongTorch/Core.hpp"
-#include "BongTorch/RMSNorm.hpp"
+#include "BongTorch/FFN_SWiGLU.hpp"
 
 void print_tensor(const Tensor& t) {
     std::cout << "Shape: " << t.shape_string() << std::endl;
@@ -25,29 +25,45 @@ int main() {
 
     std::cout << std::fixed << std::setprecision(4);
 
-    // Test RMSNorm
-    std::cout << "--- RMSNorm Test ---" << std::endl;
+    // Test FFN_SWiGLU
+    std::cout << "--- FFN_SWiGLU Test ---" << std::endl;
 
-    int dim = 4;
-    auto rms_norm = std::make_shared<RMSNorm>(dim);
+    int embed_dim = 2;
+    int hidden_dim = 3;
 
-    TensorShape shape_x = {1, 1, static_cast<size_t>(dim)};
+    auto ffn = std::make_shared<FFN_SWiGLU>(embed_dim, hidden_dim);
+
+    // Initialize weights for testing
+    auto& W1 = ffn->get_gate_linear()->weight()->data;
+    W1(0, 0, 0) = nb::BFloat16(1.0f); W1(0, 0, 1) = nb::BFloat16(0.0f);
+    W1(0, 1, 0) = nb::BFloat16(0.0f); W1(0, 1, 1) = nb::BFloat16(1.0f);
+    W1(0, 2, 0) = nb::BFloat16(1.0f); W1(0, 2, 1) = nb::BFloat16(1.0f);
+
+    auto& W2 = ffn->get_value_linear()->weight()->data;
+    W2(0, 0, 0) = nb::BFloat16(1.0f); W2(0, 0, 1) = nb::BFloat16(0.0f);
+    W2(0, 1, 0) = nb::BFloat16(1.0f); W2(0, 1, 1) = nb::BFloat16(0.0f);
+    W2(0, 2, 0) = nb::BFloat16(1.0f); W2(0, 2, 1) = nb::BFloat16(0.0f);
+
+    auto& W3 = ffn->get_down_linear()->weight()->data;
+    W3(0, 0, 0) = nb::BFloat16(1.0f); W3(0, 0, 1) = nb::BFloat16(0.0f); W3(0, 0, 2) = nb::BFloat16(0.0f);
+    W3(0, 1, 0) = nb::BFloat16(0.0f); W3(0, 1, 1) = nb::BFloat16(1.0f); W3(0, 1, 2) = nb::BFloat16(1.0f);
+
+    // Input tensor
+    TensorShape shape_x = {1, 1, 2};
     Tensor x_tensor(shape_x);
     x_tensor(0, 0, 0) = nb::BFloat16(1.0f);
     x_tensor(0, 0, 1) = nb::BFloat16(2.0f);
-    x_tensor(0, 0, 2) = nb::BFloat16(3.0f);
-    x_tensor(0, 0, 3) = nb::BFloat16(4.0f);
-
     auto var_x = Variable::create(x_tensor, "x");
 
-    auto var_y = rms_norm->forward(var_x);
+    // Forward pass
+    auto var_y = ffn->forward(var_x);
 
-    std::cout << "Result of RMSNorm(x):" << std::endl;
+    std::cout << "Result of FFN_SWiGLU(x):" << std::endl;
     print_tensor(var_y->data);
 
-    std::cout << "\nExpected result:" << std::endl;
-    std::cout << "Shape: (1, 1, 4)" << std::endl;
-    std::cout << "[[[0.3651, 0.7303, 1.0954, 1.4606]]]" << std::endl;
+    std::cout << "\nExpected result (approximate due to BFloat16 precision):" << std::endl;
+    std::cout << "Shape: (1, 1, 2)" << std::endl;
+    std::cout << "[[[0.7311, 4.6193]]]" << std::endl;
 
     return 0;
 }
