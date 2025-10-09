@@ -45,7 +45,7 @@ private:
     bool use_bias_;
 
 public:
-    ConvldLayer(int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0, bool bias = true)
+    ConvlLayer(int in_channels, int out_channels, int kernel_size, int stride = 1, int padding = 0, bool bias = true)
         : stride_(stride), padding_(padding), use_bias_(bias) 
     {
         std::array<size_t, 3> w_shape = {(size_t)out_channels, (size_t)in_channels, (size_t)kernel_size};

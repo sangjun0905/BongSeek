@@ -1,4 +1,3 @@
-// FFN_SWiGLU.hpp
 #pragma once
 #include "Module.hpp"
 #include "Linear.hpp"
