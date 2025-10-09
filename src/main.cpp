@@ -1,6 +1,7 @@
 #include <iostream>
+#include <iomanip>
 #include "BongTorch/Core.hpp"
-#include "BongTorch/Linear.hpp"
+#include "BongTorch/RMSNorm.hpp"
 
 void print_tensor(const Tensor& t) {
     std::cout << "Shape: " << t.shape_string() << std::endl;
@@ -22,41 +23,31 @@ void print_tensor(const Tensor& t) {
 int main() {
     using namespace bs;
 
-    // Test Linear
-    std::cout << "--- Linear Test ---" << std::endl;
+    std::cout << std::fixed << std::setprecision(4);
 
-    int in_features = 3;
-    int out_features = 4;
+    // Test RMSNorm
+    std::cout << "--- RMSNorm Test ---" << std::endl;
 
-    auto linear = std::make_shared<Linear>(in_features, out_features, false);
+    int dim = 4;
+    auto rms_norm = std::make_shared<RMSNorm>(dim);
 
-    // Initialize weights for testing
-    auto& W_tensor = linear->weight()->data;
-    for (size_t i = 0; i < out_features; ++i) {
-        for (size_t j = 0; j < in_features; ++j) {
-            W_tensor(0, i, j) = nb::BFloat16(static_cast<float>(i + 1));
-        }
-    }
-
-    TensorShape shape_x = {1, 2, 3};
+    TensorShape shape_x = {1, 1, static_cast<size_t>(dim)};
     Tensor x_tensor(shape_x);
     x_tensor(0, 0, 0) = nb::BFloat16(1.0f);
     x_tensor(0, 0, 1) = nb::BFloat16(2.0f);
     x_tensor(0, 0, 2) = nb::BFloat16(3.0f);
-    x_tensor(0, 1, 0) = nb::BFloat16(4.0f);
-    x_tensor(0, 1, 1) = nb::BFloat16(5.0f);
-    x_tensor(0, 1, 2) = nb::BFloat16(6.0f);
+    x_tensor(0, 0, 3) = nb::BFloat16(4.0f);
 
     auto var_x = Variable::create(x_tensor, "x");
 
-    auto var_y = linear->forward(var_x);
+    auto var_y = rms_norm->forward(var_x);
 
-    std::cout << "Result of Linear(x):" << std::endl;
+    std::cout << "Result of RMSNorm(x):" << std::endl;
     print_tensor(var_y->data);
 
     std::cout << "\nExpected result:" << std::endl;
-    std::cout << "Shape: (1, 2, 4)" << std::endl;
-    std::cout << "[[[6, 12, 18, 24],\n  [15, 30, 45, 60]]]";
+    std::cout << "Shape: (1, 1, 4)" << std::endl;
+    std::cout << "[[[0.3651, 0.7303, 1.0954, 1.4606]]]" << std::endl;
 
     return 0;
 }
