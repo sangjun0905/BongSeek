@@ -1,62 +1,70 @@
+﻿// src/main.cpp
 #include <iostream>
-#include "BongTorch/Core.hpp"
-#include "BongTorch/Linear.hpp"
+#include <iomanip>
 
-void print_tensor(const Tensor& t) {
-    std::cout << "Shape: " << t.shape_string() << std::endl;
-    if (t.ndim() == 3) {
-        for (size_t i = 0; i < t.getShape()[0]; ++i) {
-            std::cout << "[[";
-            for (size_t j = 0; j < t.getShape()[1]; ++j) {
-                std::cout << "[";
-                for (size_t k = 0; k < t.getShape()[2]; ++k) {
-                    std::cout << static_cast<float>(t(i, j, k)) << (k == t.getShape()[2] - 1 ? "" : ", ");
-                }
-                std::cout << "]" << (j == t.getShape()[1] - 1 ? "" : ",\n  ");
-            }
-            std::cout << "]]" << std::endl;
-        }
+#include "BongTorch/Core.hpp"
+#include "BongTorch/GQAAttention.hpp"
+
+using namespace bs;
+
+
+// 간단한 텐서 초기화 유틸
+static void fill_tensor(Tensor& tensor, float start, float step) {
+    auto* ptr = tensor.data();
+    const std::size_t total = tensor.size();
+    float value = start;
+    for (std::size_t i = 0; i < total; ++i) {
+        ptr[i] = static_cast<TensorValueType>(value);
+        value += step;
     }
 }
 
+static void print_slice(const Tensor& tensor,
+                        std::size_t b,
+                        std::size_t s,
+                        std::size_t count) {
+    std::cout << "[";
+    for (std::size_t d = 0; d < count; ++d) {
+        std::cout << std::fixed << std::setprecision(6)
+                  << static_cast<float>(tensor(b, s, d));
+        if (d + 1 != count) std::cout << ", ";
+    }
+    std::cout << "]\n";
+}
+
 int main() {
-    using namespace bs;
+    const std::size_t batch        = 1;
+    const std::size_t seq          = 4;
+    const std::size_t head_dim     = 8;
+    const std::size_t num_heads    = 4;      // 모델 차원 32
+    const std::size_t num_kv_heads = 2;
+    const std::size_t model_dim    = head_dim * num_heads;
 
-    // Test Linear
-    std::cout << "--- Linear Test ---" << std::endl;
+    Tensor input({batch, seq, model_dim});
+    fill_tensor(input, 0.01f, 0.01f);
+    auto input_var = Variable::create(input, "input");
 
-    int in_features = 3;
-    int out_features = 4;
+    auto attn = std::make_shared<GQAAttention>(
+        static_cast<int>(model_dim),
+        static_cast<int>(num_heads),
+        static_cast<int>(num_kv_heads),
+        static_cast<int>(head_dim));
 
-    auto linear = std::make_shared<Linear>(in_features, out_features, false);
-
-    // Initialize weights for testing
-    auto& W_tensor = linear->weight()->data;
-    for (size_t i = 0; i < out_features; ++i) {
-        for (size_t j = 0; j < in_features; ++j) {
-            W_tensor(0, i, j) = nb::BFloat16(static_cast<float>(i + 1));
-        }
+    float scale = 0.05f;
+    for (const auto& param : attn->get_parameters()) {
+        fill_tensor(param->data, scale, 0.02f);
+        scale += 0.05f;
     }
 
-    TensorShape shape_x = {1, 2, 3};
-    Tensor x_tensor(shape_x);
-    x_tensor(0, 0, 0) = nb::BFloat16(1.0f);
-    x_tensor(0, 0, 1) = nb::BFloat16(2.0f);
-    x_tensor(0, 0, 2) = nb::BFloat16(3.0f);
-    x_tensor(0, 1, 0) = nb::BFloat16(4.0f);
-    x_tensor(0, 1, 1) = nb::BFloat16(5.0f);
-    x_tensor(0, 1, 2) = nb::BFloat16(6.0f);
+    auto output = attn->forward(input_var);
 
-    auto var_x = Variable::create(x_tensor, "x");
+    std::cout << "Input shape  : " << input.shape_string() << '\n';
+    std::cout << "Output shape : " << output->data.shape_string() << '\n';
 
-    auto var_y = linear->forward(var_x);
+    std::cout << "\nOutput slice (batch 0, token 0, first 8 dims):\n";
+    print_slice(output->data, 0, 0,
+                std::min<std::size_t>(8, output->data.getShape()[2]));
 
-    std::cout << "Result of Linear(x):" << std::endl;
-    print_tensor(var_y->data);
-
-    std::cout << "\nExpected result:" << std::endl;
-    std::cout << "Shape: (1, 2, 4)" << std::endl;
-    std::cout << "[[[6, 12, 18, 24],\n  [15, 30, 45, 60]]]";
-
+    std::cout << "\nGQAAttention demo finished.\n";
     return 0;
 }

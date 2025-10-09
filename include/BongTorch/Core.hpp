@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 #include <map>
-#include "../NumBong/Tensor.hpp" 
+#include "../NumBong/Tensor.hpp"
 #include "../NumBong/BFloat16.hpp"
 
 using TensorValueType = nb::BFloat16;
@@ -55,7 +55,7 @@ public:
         std::vector<Tensor> ys = this->forward(xs);
         auto out = Variable::create(nb::as_array(ys[0]));
         return out;
-    }
+        }
     virtual std::vector<Tensor> forward(const std::vector<Tensor>& xs) = 0;
 };
 
@@ -68,7 +68,7 @@ public:
     virtual std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) = 0;
     std::shared_ptr<Variable> operator()(const std::shared_ptr<Variable>& x) {
         return this->forward(x);
-    }
+}
     void register_parameter(const std::string& name, const std::shared_ptr<Parameter>& param) {
         parameters[name] = param;
     }
@@ -79,7 +79,7 @@ public:
         std::vector<std::shared_ptr<Parameter>> all_params;
         for (const auto& pair : parameters) {
             all_params.push_back(pair.second);
-        }
+            }
         for (const auto& pair : children) {
             auto child_params = pair.second->get_parameters();
             all_params.insert(all_params.end(), child_params.begin(), child_params.end());
@@ -93,7 +93,7 @@ class Add : public Function {
 public:
     std::vector<Tensor> forward(const std::vector<Tensor>& xs) override {
         return { xs[0] + xs[1] };
-    }    
+    }
 };
 
 class Mul : public Function {
@@ -149,7 +149,7 @@ inline std::shared_ptr<Variable> apply_op(const std::shared_ptr<Variable>& a, co
 
 inline std::shared_ptr<Variable> apply_op(const std::shared_ptr<Variable>& a, const std::shared_ptr<Function>& f) {
     return (*f)({a});
-}
+    }
 
 inline std::shared_ptr<Variable> add(const std::shared_ptr<Variable>& a, const std::shared_ptr<Variable>& b) {
     return apply_op(a, b, std::make_shared<Add>());
