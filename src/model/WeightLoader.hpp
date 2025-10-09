@@ -23,4 +23,6 @@ public:
     std::vector<float> get(const std::string& tensor_name);
     std::vector<size_t> get_shape(const std::string& tensor_name);
     void print_all_tensors(size_t max_count = 20);
+    bool has(const std::string& tensor_name) const;
+    size_t tensor_count() const;
 };

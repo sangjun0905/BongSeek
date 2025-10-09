@@ -12,3 +12,8 @@ cmake .. -G "Ninja" \
   -Dnlohmann_json_DIR="/c/working/git_clone/new folder/BongSeek/vcpkg/installed/x64-windows/share/nlohmann_json"
 
  cmake --build . --clean-first
+
+
+ C:\working\git_clone\bongseek_clean> cmake --build build\model --target BongSeekModel
+ build\model\BongSeekModel.exe
+ chcp 65001

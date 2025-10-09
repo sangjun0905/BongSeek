@@ -5,9 +5,9 @@
 
 using json = nlohmann::json;
 
-// ---- BF16 → float 변환 함수 ----
+// ---- BF16 -> float 변환 함수 ----
 inline float bf16_to_float(uint16_t val) {
-    uint32_t tmp = ((uint32_t)val) << 16;
+    uint32_t tmp = static_cast<uint32_t>(val) << 16;
     float result;
     std::memcpy(&result, &tmp, sizeof(float));
     return result;
@@ -18,7 +18,7 @@ bool WeightLoader::load(const std::string& path) {
     file_path = path;
     file.open(path, std::ios::binary);
     if (!file.is_open()) {
-        std::cerr << "[WeightLoader] 파일 열기 실패: " << path << std::endl;
+        std::cerr << "[WeightLoader] 파일 읽기 실패: " << path << std::endl;
         return false;
     }
 
@@ -64,8 +64,9 @@ std::vector<float> WeightLoader::get(const std::string& tensor_name) {
         data.resize(count);
         std::vector<uint16_t> tmp(count);
         file.read(reinterpret_cast<char*>(tmp.data()), bytes);
-        for (size_t i = 0; i < count; ++i)
+        for (size_t i = 0; i < count; ++i) {
             data[i] = bf16_to_float(tmp[i]);
+        }
     } else {
         std::cerr << "[WeightLoader] 지원되지 않는 dtype: " << info.dtype << std::endl;
         return {};
@@ -84,19 +85,27 @@ std::vector<size_t> WeightLoader::get_shape(const std::string& tensor_name) {
 void WeightLoader::print_all_tensors(size_t max_count) {
     size_t count = 0;
     for (auto& [name, info] : tensor_map) {
-        std::cout << "📦 " << name
+        std::cout << " • " << name
                   << " | dtype=" << info.dtype
                   << " | shape=(";
         for (size_t i = 0; i < info.shape.size(); ++i) {
             std::cout << info.shape[i];
-            if (i < info.shape.size() - 1) std::cout << ",";
+            if (i + 1 < info.shape.size()) std::cout << ",";
         }
         std::cout << ")\n";
 
         if (++count >= max_count) {
-            std::cout << "… (" << tensor_map.size() - count
+            std::cout << "   (" << tensor_map.size() - count
                       << " more tensors)\n";
             break;
         }
     }
+}
+
+bool WeightLoader::has(const std::string& tensor_name) const {
+    return tensor_map.find(tensor_name) != tensor_map.end();
+}
+
+size_t WeightLoader::tensor_count() const {
+    return tensor_map.size();
 }
