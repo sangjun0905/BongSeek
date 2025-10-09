@@ -23,11 +23,15 @@ int main() {
     metadata = loader.get_tensor_map();
 
     cout << "test4 "<<endl;
+    
     Config config;
     Model model(config);
 
-    model.load_weights(file, metadata);
     cout << "test5 "<<endl;
+
+    loader.print_all_tensors();
+    model.load_weights(file, metadata);
+    
     
 
     return 0;

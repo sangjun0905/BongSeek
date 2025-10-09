@@ -46,14 +46,14 @@ public:
 
 
         for(auto& [key, value] : metadata) {
-            if(key.compare(0, 12, "gate_linear.") == 0) {
-                gate_linear_meta[key.substr(12)] = value; // "gate_linear." 제외
+            if(key.compare(0, 3 "w1.") == 0) {
+                gate_linear_meta[key.substr(3)] = value; 
             } 
-            else if (key.compare(0, 13, "value_linear.") == 0) {
-                value_linear_meta[key.substr(13)] = value; // "value_linear." 제외
+            else if (key.compare(0, 3, "w2.") == 0) {
+                value_linear_meta[key.substr(3)] = value; // "value_linear." 제외
             } 
-            else if (key.compare(0, 12, "down_linear.") == 0) {
-                down_linear_meta[key.substr(12)] = value; // "down_linear." 제외
+            else if (key.compare(0, 3, "w3.") == 0) {
+                down_linear_meta[key.substr(3)] = value; // "down_linear." 제외
             }
         }
 

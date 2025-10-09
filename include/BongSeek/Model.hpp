@@ -227,22 +227,35 @@ public:
 
 		for (const auto& [key, meta] : metadata) {
     
-        if (key.substr(0, 13)=="model.layers.") {
-            int layer_idx = stoi(key.substr(13, key.find('.', 13) - 13)); // "model.layers." 다음 숫자 추출
-            // "model.layers.0." 부분을 제외한 나머지 키를 생성
-            // 예: "self_attn.q_proj.weight"
-            string child_key = key.substr(key.find('.', 13) + 1);
-            weights_by_layer[layer_idx][child_key] = meta;
-        } else {
-            other_weights[key] = meta;
-        }
-    }
+        	if (key.substr(0, 13)=="model.layers.") {
+            	int layer_idx = stoi(key.substr(13, key.find('.', 13) - 13)); // "model.layers." 다음 숫자 추출
+            	// "model.layers.0." 부분을 제외한 나머지 키를 생성
+            	// 예: "self_attn.q_proj.weight"
+            	string child_key = key.substr(key.find('.', 13) + 1);
+				MetadataMap a = weights_by_layer[layer_idx];
+				a[child_key] = meta;
+				weights_by_layer[layer_idx] = a;
+            	//weights_by_layer[layer_idx][child_key] = meta;
+				cout << layer_idx <<endl;
+        	} 
+			else {
+            	other_weights[key] = meta;
+        	}
+    	}
+		cout<< "layer weight set test1" <<endl;
 
-    	for (size_t i = 0; i < layers.size(); ++i) {
-        	if (weights_by_layer.count(i)) {
-            	layers[i]->loadWeights(file, weights_by_layer.at(i));
+    	for (int i = 0; i < layers.size(); i++) {
+        	if (weights_by_layer.find(i) != weights_by_layer.end()) {
+				cout << i << endl;
+				try{
+            		layers[i]->loadWeights(file, weights_by_layer[i]);
+				}
+				catch(const std::out_of_range& e) {
+					std::cerr <<"키가 없습니다: " << e.what() << endl;
+				}
         	}
   		}
+		cout<< "layer weight set test2" <<endl;
 		
 		for (auto& [key, value] : other_weights) {
 			if( key.compare(0, 19, "model.embed_tokens.") == 0) {

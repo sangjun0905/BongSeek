@@ -8,31 +8,109 @@ using namespace std;
 
 // ---- safetensors 헤더 읽기 ----
 bool WeightLoader::load(const std::string& path) {
-    
-    
     file_path = path;
-    cout << "test5 "<<endl;
+    tensor_map.clear();
     file.open(path, std::ios::binary);
     if (!file.is_open()) {
         std::cerr << "[WeightLoader] 파일 읽기 실패: " << path << std::endl;
         return false;
     }
-    cout << "test6 "<<endl;
-    uint32_t header_len = 0;
-    file.read(reinterpret_cast<char*>(&header_len), 4);
-    std::string header_str(header_len, '\0');
-    file.read(&header_str[0], header_len);
 
-    cout << "test7 "<<endl;
-    json header = json::parse(header_str);
-    cout << "test8 "<<endl;
-    for (auto& [name, meta] : header.items()) { // 텐서 헤더 항목 순회
+    std::uint64_t header_len = 0;
+    file.read(reinterpret_cast<char*>(&header_len), sizeof(header_len));
+    if (!file) {
+        std::cerr << "[WeightLoader] 헤더 길이 읽기 실패\n";
+        return false;
+    }
+
+    std::string header_str(static_cast<std::size_t>(header_len), '\0');
+    if (header_len > 0) {
+        file.read(header_str.data(), static_cast<std::streamsize>(header_len));
+        if (!file) {
+            std::cerr << "[WeightLoader] 헤더 데이터 읽기 실패\n";
+            return false;
+        }
+    }
+
+    json header;
+    try {
+        header = json::parse(header_str);
+    } catch (const std::exception& e) {
+        std::cerr << "[WeightLoader] 헤더 파싱 실패: " << e.what() << std::endl;
+        return false;
+    }
+
+    const std::size_t data_base_offset =
+        static_cast<std::size_t>(sizeof(std::uint64_t) + header_len);
+
+    auto register_tensor = [&](const std::string& tensor_name, const json& meta) {
+        if (tensor_name.empty() || !meta.is_object()) return;
+        std::cout<<"tensor 이름 출력: "<< tensor_name <<std::endl;
+
         TensorInfo info;
-        info.dtype = meta["dtype"].get<std::string>();
-        for (auto& d : meta["shape"]) info.shape.push_back(d.get<size_t>());
-        info.offset_start = meta["data_offsets"][0].get<size_t>();
-        info.offset_end   = meta["data_offsets"][1].get<size_t>();
-        tensor_map[name] = info;
+        info.dtype = meta.value("data_type", meta.value("dtype", std::string{}));
+        if (info.dtype.empty()) {
+            std::cerr << "[WeightLoader] dtype 누락: " << tensor_name << std::endl;
+            return;
+        }
+
+        if (meta.contains("shape") && meta["shape"].is_array()) {
+            for (const auto& d : meta["shape"]) {
+                info.shape.push_back(d.get<std::size_t>());
+            }
+        }
+
+        std::size_t offset = 0;
+        if (meta.contains("offset")) {
+            offset = meta["offset"].get<std::size_t>();
+        } else if (meta.contains("offset_start")) {
+            offset = meta["offset_start"].get<std::size_t>();
+        } else if (meta.contains("data_offsets") && meta["data_offsets"].is_array() && !meta["data_offsets"].empty()) {
+            offset = meta["data_offsets"][0].get<std::size_t>();
+        } else {
+            std::cerr << "[WeightLoader] offset 누락: " << tensor_name << std::endl;
+            return;
+        }
+
+        std::size_t element_size = 0;
+        if (info.dtype == "BF16" || info.dtype == "bf16" || info.dtype == "BFloat16") {
+            element_size = sizeof(std::uint16_t);
+        } else if (info.dtype == "F32" || info.dtype == "f32" || info.dtype == "Float32") {
+            element_size = sizeof(float);
+        } else {
+            std::cerr << "[WeightLoader] 지원되지 않는 dtype(" << info.dtype
+                      << ") - " << tensor_name << std::endl;
+            return;
+        }
+
+        std::size_t element_count = 1;
+        for (const auto dim : info.shape) {
+            element_count *= dim;
+        }
+        const std::size_t byte_count = element_count * element_size;
+
+        const std::size_t actual_start = data_base_offset + offset;
+        info.offset_start = actual_start >= sizeof(std::uint32_t)
+            ? actual_start - sizeof(std::uint32_t)
+            : 0;
+        info.offset_end = info.offset_start + byte_count;
+
+        tensor_map[tensor_name] = info;
+    };
+
+    if (header.is_array()) {
+        for (const auto& entry : header) {
+            const std::string name = entry.value("layername", std::string{});
+            register_tensor(name.empty() ? entry.value("name", std::string{}) : name, entry);
+        }
+    } else if (header.is_object()) {
+        for (auto& [name, meta] : header.items()) {
+            std::string tensor_name = meta.value("layername", name);
+            register_tensor(tensor_name, meta);
+        }
+    } else {
+        std::cerr << "[WeightLoader] 지원되지 않는 헤더 형식입니다.\n";
+        return false;
     }
 
     std::cout << "[WeightLoader] " << tensor_map.size() << "개의 텐서 인덱싱 완료." << std::endl;
@@ -91,11 +169,6 @@ void WeightLoader::print_all_tensors(size_t max_count) {
         }
         std::cout << ")\n";
 
-        if (++count >= max_count) {
-            std::cout << "   (" << tensor_map.size() - count
-                      << " more tensors)\n";
-            break;
-        }
     }
 }
 

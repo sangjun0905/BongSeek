@@ -235,19 +235,19 @@ public:
     std::shared_ptr<Parameter> out_proj_weight() const { return out_proj_weight_; }
     void loadWeights(std::istream& file, const MetadataMap& metadata)
     {
-        MetadataMap w1_meta;
-        MetadataMap w2_meta;
-        MetadataMap w3_meta;
+        MetadataMap conv_meta;
+        MetadataMap in_proj_meta;
+        MetadataMap out_proj_meta;
 
         for(auto& [key, value] : metadata) {
-            if(key.compare(0,3, "w1.") == 0) {
-                w1_meta[key.substr(3)] = value; // "w1." 제외
+            if(key.compare(0,5, "conv.") == 0) {
+                conv_meta[key.substr(5)] = value; // "w1." 제외
             } 
-            else if (key.compare(0,3, "w2.") == 0) {
-                w2_meta[key.substr(3)] = value; // "w2." 제외
+            else if (key.compare(0, 8, "in_proj.") == 0) {
+                in_proj_meta[key.substr(8)] = value; // "w2." 제외
             } 
-            else if (key.compare(0,3, "w3.") == 0) {
-                w3_meta[key.substr(3)] = value; // "w3." 제외
+            else if (key.compare(0,9, "out_proj.") == 0) {
+                out_proj_meta[key.substr(9)] = value; // "w3." 제외
             }
         }
 
