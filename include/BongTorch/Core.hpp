@@ -23,7 +23,7 @@ struct Config {
     static inline bool train = true;
 };
 
-class UsingConfig {
+class UsingCongit fig {
 public:
     UsingConfig(bool& flag, bool val) : flagRef(flag), old(flag) { flagRef = val; }
     ~UsingConfig() { flagRef = old; }
