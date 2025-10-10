@@ -75,9 +75,7 @@ public:
         }
 
         const auto& info = it->second;
-        W->data.loadWeight(file,
-                           static_cast<std::streamoff>(info.offset_start),
-                           static_cast<std::streamoff>(info.offset_end));
+        load_tensor_data_checked("Embedding.weight", W->data, file, info);
     }
 };
 

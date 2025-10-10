@@ -10,7 +10,7 @@ class RoPE : public Function {
 public:
 
     std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) {
-        throw std::invalid_argument("RoPE::forward requires cosine and sine variables");
+        return x;
     }
 
     std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x,

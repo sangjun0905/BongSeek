@@ -1,4 +1,4 @@
-#include "bongseek/WeightLoader.hpp"
+#include "BongSeek/WeightLoader.hpp"
 #include <cstdint>
 #include <iostream>
 #include "NumBong/BFloat16.hpp"
@@ -44,12 +44,13 @@ bool WeightLoader::load(const std::string& path) {
         static_cast<std::size_t>(sizeof(std::uint64_t) + header_len);
 
     auto register_tensor = [&](const std::string& tensor_name, const json& meta) {
-        if (tensor_name.empty() || !meta.is_object()) return;
+        if (tensor_name.empty() || tensor_name == "__metadata__" || !meta.is_object()) {
+            return;
+        }
 
         TensorInfo info;
         info.dtype = meta.value("data_type", meta.value("dtype", std::string{}));
         if (info.dtype.empty()) {
-            std::cerr << "[WeightLoader] dtype 누락: " << tensor_name << std::endl;
             return;
         }
 
@@ -57,18 +58,6 @@ bool WeightLoader::load(const std::string& path) {
             for (const auto& d : meta["shape"]) {
                 info.shape.push_back(d.get<std::size_t>());
             }
-        }
-
-        std::size_t offset = 0;
-        if (meta.contains("offset")) {
-            offset = meta["offset"].get<std::size_t>();
-        } else if (meta.contains("offset_start")) {
-            offset = meta["offset_start"].get<std::size_t>();
-        } else if (meta.contains("data_offsets") && meta["data_offsets"].is_array() && !meta["data_offsets"].empty()) {
-            offset = meta["data_offsets"][0].get<std::size_t>();
-        } else {
-            std::cerr << "[WeightLoader] offset 누락: " << tensor_name << std::endl;
-            return;
         }
 
         std::size_t element_size = 0;
@@ -88,11 +77,37 @@ bool WeightLoader::load(const std::string& path) {
         }
         const std::size_t byte_count = element_count * element_size;
 
-        const std::size_t actual_start = data_base_offset + offset;
-        info.offset_start = actual_start >= sizeof(std::uint32_t)
-            ? actual_start - sizeof(std::uint32_t)
-            : 0;
-        info.offset_end = info.offset_start + byte_count;
+        std::size_t relative_start = 0;
+        std::size_t relative_end = 0;
+        if (meta.contains("data_offsets") && meta["data_offsets"].is_array() && meta["data_offsets"].size() == 2) {
+            relative_start = meta["data_offsets"][0].get<std::size_t>();
+            relative_end = meta["data_offsets"][1].get<std::size_t>();
+        } else {
+            if (meta.contains("offset")) {
+                relative_start = meta["offset"].get<std::size_t>();
+            } else if (meta.contains("offset_start")) {
+                relative_start = meta["offset_start"].get<std::size_t>();
+            } else {
+                std::cerr << "[WeightLoader] offset 정보 누락: " << tensor_name << std::endl;
+                return;
+            }
+            relative_end = relative_start + byte_count;
+        }
+
+        if (relative_end < relative_start) {
+            std::cerr << "[WeightLoader] 잘못된 offset 범위: " << tensor_name << std::endl;
+            return;
+        }
+
+        const std::size_t span = relative_end - relative_start;
+        if (byte_count != 0 && span != byte_count) {
+            std::cerr << "[WeightLoader] 크기 불일치: " << tensor_name
+                      << " | metadata=" << span << " bytes, expected=" << byte_count << " bytes"
+                      << std::endl;
+        }
+
+        info.offset_start = data_base_offset + relative_start;
+        info.offset_end = data_base_offset + relative_end;
 
         tensor_map[tensor_name] = info;
     };
@@ -124,16 +139,24 @@ std::vector<float> WeightLoader::get(const std::string& tensor_name) {
     }
 
     const auto& info = tensor_map[tensor_name];
-    size_t bytes = info.offset_end - info.offset_start;
+    if (info.offset_end < info.offset_start) {
+        std::cerr << "[WeightLoader] 잘못된 오프셋 범위: " << tensor_name << std::endl;
+        return {};
+    }
+    const std::size_t bytes = info.offset_end - info.offset_start;
 
     std::vector<float> data; // 바이너리 데이터 저장된 벡터
-    file.seekg(4 + info.offset_start, std::ios::beg);
+    file.seekg(static_cast<std::streamoff>(info.offset_start), std::ios::beg);
+    if (!file) {
+        std::cerr << "[WeightLoader] 파일 seek 실패: " << tensor_name << std::endl;
+        return {};
+    }
 
-    if (info.dtype == "F32") {
+    if (info.dtype == "F32" || info.dtype == "f32" || info.dtype == "Float32") {
         size_t count = bytes / sizeof(float);
         data.resize(count);
         file.read(reinterpret_cast<char*>(data.data()), bytes);
-    } else if (info.dtype == "BF16") {
+    } else if (info.dtype == "BF16" || info.dtype == "bf16" || info.dtype == "BFloat16") {
         size_t count = bytes / 2;
         data.resize(count);
         std::vector<uint16_t> tmp(count);

@@ -1,9 +1,12 @@
 #pragma once
 #include <iostream>
-#include <vector>
-#include <string>
-#include <memory>
+#include <algorithm>
+#include <cstddef>
+#include <limits>
 #include <map>
+#include <memory>
+#include <string>
+#include <vector>
 #include <fstream>
 #include "Config.hpp"
 #include "../NumBong/Tensor.hpp"
@@ -46,17 +49,32 @@ public:
 
 	ConvLayer(int hidden_size,
 		int intermediate_size)
-	{
-		operator_norm = bs::RMSNorm(hidden_size);
-		conv = bs::Conv1d(hidden_size, hidden_size, 3, 6144, 2048);  //나중에 한번 더 재확인
-		ffn_norm = bs::RMSNorm(hidden_size);
-		feed_forward = bs::FFN_SWiGLU(hidden_size, intermediate_size);
-	}
+	    : operator_norm(hidden_size),
+	      conv(hidden_size,
+	           hidden_size,
+	           3,
+	           static_cast<std::size_t>(3 * hidden_size),
+	           hidden_size,
+	           1,
+	           1,
+	           hidden_size),
+	      ffn_norm(hidden_size),
+	      feed_forward(hidden_size, intermediate_size)
+	{}
 
 	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
 		shared_ptr<bs::Variable> residual = x;
 		x = operator_norm.forward(x);
 		x = conv.forward(x);
+		const auto res_shape = residual->data.getShape();
+		const auto conv_shape = x->data.getShape();
+		if (conv_shape != res_shape &&
+			conv_shape.size() == res_shape.size() && conv_shape.size() == 3 &&
+			conv_shape[0] == res_shape[0] &&
+			conv_shape[1] == res_shape[2] && conv_shape[2] == res_shape[1]) {
+			auto aligned = bs::detail::transpose_cs(x->data);
+			x = bs::Variable::create(aligned, x->name + "_aligned");
+		}
 		x = add(residual, x);
 
 		residual = x;
@@ -121,13 +139,50 @@ public:
 
 	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) override {
 		shared_ptr<bs::Variable> residual = x;
-		x = operator_norm.forward(x);
-		x = self_attn.forward(x);
-		x = add(residual, x);
+		try {
+			x = operator_norm.forward(x);
+		} catch (const std::exception& e) {
+			throw std::runtime_error("[AttentionLayer] operator_norm failed: " + std::string(e.what()));
+		}
+		try {
+			x = self_attn.forward(x);
+		} catch (const std::exception& e) {
+			throw std::runtime_error("[AttentionLayer] self_attn failed: " + std::string(e.what()));
+		}
+		const auto res_shape = residual->data.getShape();
+		const auto attn_shape = x->data.getShape();
+		if (attn_shape != res_shape &&
+		    attn_shape.size() == res_shape.size() &&
+		    attn_shape.size() == 3 &&
+		    attn_shape[0] == res_shape[0] &&
+		    attn_shape[1] == res_shape[2] &&
+		    attn_shape[2] == res_shape[1]) {
+			auto aligned = bs::detail::transpose_cs(x->data);
+			x = bs::Variable::create(aligned, x->name + "_aligned");
+		}
+		try {
+			x = add(residual, x);
+		} catch (const std::exception& e) {
+			throw std::runtime_error("[AttentionLayer] residual add failed: " + std::string(e.what()));
+		}
 
 		residual = x;
-		x = feed_forward.forward(ffn_norm.forward(x));
-		x = add(residual, x);
+		std::shared_ptr<bs::Variable> normed;
+		try {
+			normed = ffn_norm.forward(x);
+		} catch (const std::exception& e) {
+			throw std::runtime_error("[AttentionLayer] ffn_norm failed: " + std::string(e.what()));
+		}
+		try {
+			x = feed_forward.forward(normed);
+		} catch (const std::exception& e) {
+			throw std::runtime_error("[AttentionLayer] feed_forward failed: " + std::string(e.what()));
+		}
+		try {
+			x = add(residual, x);
+		} catch (const std::exception& e) {
+			throw std::runtime_error("[AttentionLayer] residual add2 failed: " + std::string(e.what()));
+		}
 
 		return x;
 	}
@@ -169,16 +224,19 @@ class Model {
 	bs::Embedding embedding;
 	bs::RMSNorm embednorm;
 	bs::RoPE pe;
+	std::size_t vocab_size_;
+	std::size_t hidden_size_;
 
 	std::map<int, MetadataMap> weights_by_layer;
     MetadataMap other_weights;
 public:
 
-	Model(Config config) {
-		
-		embedding = bs::Embedding(config.vocab_size, config.hidden_size);
-		embednorm = bs::RMSNorm(config.hidden_size);
-		//pe = bs::RoPE(config.hidden_size, config.max_position_embeddings);
+	Model(Config config)
+		: embedding(config.vocab_size, config.hidden_size),
+		  embednorm(config.hidden_size),
+		  vocab_size_(static_cast<std::size_t>(config.vocab_size)),
+		  hidden_size_(static_cast<std::size_t>(config.hidden_size)) {
+
 
 		int i = 0;
 		for (string type : config.layer_types) {
@@ -198,7 +256,8 @@ public:
 	}
 
 	
-	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x) 
+	shared_ptr<bs::Variable> forward(shared_ptr<bs::Variable> x,
+	                               std::size_t max_layers = std::numeric_limits<std::size_t>::max()) 
 	{
 		
 		shared_ptr<bs::Variable> embed = embedding.forward(x);
@@ -209,17 +268,23 @@ public:
 		//positional encoding -> (batch, token, 2048)			
 		shared_ptr<bs::Variable> current = pe.forward(embed);
 
-		//layers (batch, token, 2048)
-		for (auto& layer : layers) {
-			current = layer->forward(current);
-			cout << endl;
+		const std::size_t limit = std::min<std::size_t>(max_layers, layers.size());
+		for (std::size_t idx = 0; idx < limit; ++idx) {
+			try {
+				current = layers[idx]->forward(current);
+			} catch (const std::exception& e) {
+				throw std::runtime_error("[Model] Layer " + std::to_string(idx) +
+					" forward failed: " + e.what());
+			}
 		}
 
 		//embedding  -> (batch, token, 65536)
 
 
-		return current;
+		return project_to_vocab(current);
 	}
+
+	std::size_t layer_count() const { return layers.size(); }
 
 	
 	void load_weights(istream& file, MetadataMap metadata)
@@ -261,7 +326,6 @@ public:
                 other_weights[key] = meta;
             }
         }
-		cout<< "layer weight set test1" <<endl;
 
         for (std::size_t i = 0; i < layers.size(); ++i) {
             auto it = weights_by_layer.find(static_cast<int>(i));
@@ -270,7 +334,6 @@ public:
             }
             layers[i]->loadWeights(file, it->second);
         }
-		cout<< "layer weight set test2" <<endl;
 		
 		for (auto& [key, value] : other_weights) {
 			if( key.compare(0, 19, "model.embed_tokens.") == 0) {
@@ -284,9 +347,42 @@ public:
 				embednorm.loadWeights(file, embednorm_meta);
 			} 
 		}
-		cout<<"all weights loaded"<<endl;
 	
 
+	}
+
+private:
+	shared_ptr<bs::Variable> project_to_vocab(const shared_ptr<bs::Variable>& hidden) const {
+		const auto shape = hidden->data.getShape();
+		if (shape.size() != 3) {
+			throw std::runtime_error("[Model] hidden state must be rank-3 tensor.");
+		}
+		if (shape[2] != hidden_size_) {
+			throw std::runtime_error("[Model] hidden size mismatch during unembedding.");
+		}
+
+		const std::size_t batch = shape[0];
+		const std::size_t sequence = shape[1];
+
+		const auto total_tokens = static_cast<std::size_t>(batch * sequence);
+
+		const std::vector<std::ptrdiff_t> flat_shape = {
+			static_cast<std::ptrdiff_t>(1),
+			static_cast<std::ptrdiff_t>(total_tokens),
+			static_cast<std::ptrdiff_t>(hidden_size_)};
+		Tensor hidden_flat = nb::reshape(hidden->data, flat_shape);
+
+		Tensor tied_weight = embedding.weight()->data.transpose(0, 2);
+
+		Tensor logits_flat = hidden_flat.matmul(tied_weight);
+
+		Shape output_shape = {
+			static_cast<std::size_t>(batch),
+			static_cast<std::size_t>(sequence),
+			vocab_size_};
+		Tensor logits = nb::reshape(logits_flat, output_shape);
+
+		return bs::Variable::create(logits, "logits");
 	}
 
 };

@@ -214,17 +214,25 @@ public:
         const std::size_t batch = shape[0];
         const std::size_t seq = shape[1];
 
-        auto q_var = (*WQ_)(x);
-        auto k_var = (*WK_)(x);
-        auto v_var = (*WV_)(x);
+        auto safe_linear = [](const std::shared_ptr<Linear>& linear,
+                               const std::shared_ptr<Variable>& input,
+                               const char* label) {
+            try {
+                return (*linear)(input);
+            } catch (const std::exception& e) {
+                throw std::runtime_error(std::string(label) + " failed: " + e.what());
+            }
+        };
+
+        auto q_var = safe_linear(WQ_, x, "GQAAttention.WQ");
+        auto k_var = safe_linear(WK_, x, "GQAAttention.WK");
+        auto v_var = safe_linear(WV_, x, "GQAAttention.WV");
 
         Tensor q_norm = rms_norm(q_var->data, q_norm_weight_->data, head_dim_);
         Tensor k_norm = rms_norm(k_var->data, k_norm_weight_->data, head_dim_);
-
         Tensor q_heads = reshape_to_heads(q_norm, batch, seq, num_heads_, head_dim_);
         Tensor k_heads_base = reshape_to_heads(k_norm, batch, seq, num_kv_heads_, head_dim_);
         Tensor v_heads_base = reshape_to_heads(v_var->data, batch, seq, num_kv_heads_, head_dim_);
-
         Tensor k_heads = repeat_kv_heads(k_heads_base, batch, seq);
         Tensor v_heads = repeat_kv_heads(v_heads_base, batch, seq);
 
@@ -235,7 +243,8 @@ public:
         Tensor context_heads = apply_attention(scores_var->data, v_heads, batch, seq);
         Tensor context = reshape_back(context_heads, batch, seq);
 
-        return (*WO_)(Variable::create(context, "attention_output"));
+        auto out_var = Variable::create(context, "attention_output");
+        return safe_linear(WO_, out_var, "GQAAttention.WO");
     }
 
     void loadWeights(std::istream& file, const MetadataMap& metadata){
@@ -273,12 +282,18 @@ public:
         WK_->loadWeights(file, WK_meta);
         WV_->loadWeights(file, WV_meta);
         WO_->loadWeights(file, WO_meta);
-        long long startoffset = q_layernorm_meta.at("weight").offset_start;
-        long long endoffset = q_layernorm_meta.at("weight").offset_end;
-        q_norm_weight_->data.loadWeight(file, startoffset, endoffset);
-        startoffset = k_layernorm_meta.at("weight").offset_start;
-        endoffset = k_layernorm_meta.at("weight").offset_end;
-        k_norm_weight_->data.loadWeight(file, startoffset, endoffset);
+        if (auto it = q_layernorm_meta.find("weight"); it != q_layernorm_meta.end()) {
+            const std::string label = "GQAAttention." + q_norm_weight_->name;
+            load_tensor_data_checked(label, q_norm_weight_->data, file, it->second);
+        } else {
+            std::cerr << "[GQAAttention] q_layernorm.weight 메타데이터가 없어 로딩을 건너뜁니다.\n";
+        }
+        if (auto it = k_layernorm_meta.find("weight"); it != k_layernorm_meta.end()) {
+            const std::string label = "GQAAttention." + k_norm_weight_->name;
+            load_tensor_data_checked(label, k_norm_weight_->data, file, it->second);
+        } else {
+            std::cerr << "[GQAAttention] k_layernorm.weight 메타데이터가 없어 로딩을 건너뜁니다.\n";
+        }
         // normalization 구현 시 weight추가
     }
 };

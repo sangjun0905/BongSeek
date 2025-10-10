@@ -66,9 +66,7 @@ public:
         }
 
         const auto& info = it->second;
-        weight->data.loadWeight(file,
-                                static_cast<std::streamoff>(info.offset_start),
-                                static_cast<std::streamoff>(info.offset_end));
+        load_tensor_data_checked("RMSNorm.weight", weight->data, file, info);
     }
 };
 

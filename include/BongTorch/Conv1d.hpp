@@ -214,6 +214,12 @@ public:
     }
 
     std::shared_ptr<Variable> forward(const std::shared_ptr<Variable>& x) override {
+        const auto original_shape = x->data.getShape();
+        const bool original_was_bsc =
+            original_shape.size() == 3 &&
+            original_shape[2] == in_channels_ &&
+            original_shape[1] != in_channels_;
+
         auto conv_input = adapt_input_layout(x);
 
         auto conv_out = conv1d_op(conv_input, conv_weight_, stride_, padding_, groups_);
@@ -225,6 +231,10 @@ public:
                                                 : in_proj_out;
 
         auto out_proj_out = detail::linear_forward(proj_input, out_proj_weight_->data);
+
+        if (original_was_bsc) {
+            return Variable::create(out_proj_out, "conv_out_proj");
+        }
 
         auto final_back = detail::transpose_cs(out_proj_out);
         return Variable::create(final_back, "conv_out_proj");
@@ -251,7 +261,26 @@ public:
             }
         }
 
-        // conv layer 수정 하면 loadweights 호출
+        if (auto it = conv_meta.find("weight"); it != conv_meta.end()) {
+            const std::string label = "Conv1d." + conv_weight_->name;
+            load_tensor_data_checked(label, conv_weight_->data, file, it->second);
+        } else {
+            std::cerr << "[Conv1d] conv.weight 메타데이터가 없어 로딩을 건너뜁니다.\n";
+        }
+
+        if (auto it = in_proj_meta.find("weight"); it != in_proj_meta.end()) {
+            const std::string label = "Conv1d." + in_proj_weight_->name;
+            load_tensor_data_checked(label, in_proj_weight_->data, file, it->second);
+        } else {
+            std::cerr << "[Conv1d] in_proj.weight 메타데이터가 없어 로딩을 건너뜁니다.\n";
+        }
+
+        if (auto it = out_proj_meta.find("weight"); it != out_proj_meta.end()) {
+            const std::string label = "Conv1d." + out_proj_weight_->name;
+            load_tensor_data_checked(label, out_proj_weight_->data, file, it->second);
+        } else {
+            std::cerr << "[Conv1d] out_proj.weight 메타데이터가 없어 로딩을 건너뜁니다.\n";
+        }
     }
 
 private:
@@ -266,6 +295,12 @@ private:
             return Variable::create(transposed, x->name + "_transpose_cs");
         }
 
+        std::cerr << "[Conv1d] unexpected input shape: (";
+        for (std::size_t i = 0; i < shape.size(); ++i) {
+            std::cerr << shape[i];
+            if (i + 1 < shape.size()) std::cerr << ", ";
+        }
+        std::cerr << "), expected in_channels=" << in_channels_ << std::endl;
         throw std::runtime_error("Conv1d::forward: input tensor must be (B, C_in, S) or (B, S, C_in).");
     }
 

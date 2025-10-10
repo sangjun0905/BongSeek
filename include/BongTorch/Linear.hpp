@@ -55,17 +55,15 @@ public:
         }
 
         const auto& weight_info = weight_it->second;
-        W->data.loadWeight(file,
-                           static_cast<std::streamoff>(weight_info.offset_start),
-                           static_cast<std::streamoff>(weight_info.offset_end));
+        const std::string weight_label = "Linear." + W->name;
+        load_tensor_data_checked(weight_label, W->data, file, weight_info);
 
         if (use_bias && b) {
             auto bias_it = metadata.find("bias");
             if (bias_it != metadata.end()) {
                 const auto& bias_info = bias_it->second;
-                b->data.loadWeight(file,
-                                   static_cast<std::streamoff>(bias_info.offset_start),
-                                   static_cast<std::streamoff>(bias_info.offset_end));
+                const std::string bias_label = "Linear." + b->name;
+                load_tensor_data_checked(bias_label, b->data, file, bias_info);
             } else {
                 std::cerr << "[Linear] bias 메타데이터가 없어 bias 로딩을 건너뜁니다.\n";
             }

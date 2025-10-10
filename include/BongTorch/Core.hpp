@@ -3,12 +3,17 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <functional>
 #include <iostream>
+#include <istream>
 #include <map>
 #include <memory>
 #include <set>
+#include <unordered_map>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 #include "../NumBong/Tensor.hpp" 
 
@@ -38,6 +43,95 @@ using Shape = nb::Shape;
 using TensorShape = typename Tensor::shape_type;
 
 namespace bs {
+
+inline bool equals_ignore_case(std::string_view lhs, std::string_view rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < lhs.size(); ++i) {
+        const auto a = static_cast<unsigned char>(lhs[i]);
+        const auto b = static_cast<unsigned char>(rhs[i]);
+        if (std::tolower(a) != std::tolower(b)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+inline void load_tensor_data(Tensor& tensor,
+                             std::istream& file,
+                             const TensorInfo& info) {
+    const auto start = static_cast<std::streamoff>(info.offset_start);
+    const auto end = static_cast<std::streamoff>(info.offset_end);
+    if (start < 0 || end < start) {
+        throw std::invalid_argument("load_tensor_data: invalid offset range");
+    }
+
+    const auto element_count = tensor.size();
+    if (element_count == 0) {
+        return;
+    }
+
+    const auto span = end - start;
+
+    if (equals_ignore_case(info.dtype, "BF16") || equals_ignore_case(info.dtype, "BFloat16")) {
+        const auto expected = static_cast<std::streamoff>(element_count * sizeof(TensorValueType));
+        if (span != expected) {
+            throw std::invalid_argument(
+                "load_tensor_data: bf16 byte span mismatch (span=" +
+                std::to_string(static_cast<long long>(span)) +
+                ", expected=" +
+                std::to_string(static_cast<long long>(expected)) +
+                ", elements=" +
+                std::to_string(element_count) + ")");
+        }
+        file.clear();
+        tensor.loadWeight(file, start, end);
+        return;
+    }
+
+    if (equals_ignore_case(info.dtype, "F32") || equals_ignore_case(info.dtype, "Float32")) {
+        const auto expected = static_cast<std::streamoff>(element_count * sizeof(float));
+        if (span != expected) {
+            throw std::invalid_argument(
+                "load_tensor_data: f32 byte span mismatch (span=" +
+                std::to_string(static_cast<long long>(span)) +
+                ", expected=" +
+                std::to_string(static_cast<long long>(expected)) +
+                ", elements=" +
+                std::to_string(element_count) + ")");
+        }
+        std::vector<float> buffer(element_count);
+        file.clear();
+        file.seekg(start, std::ios::beg);
+        if (!file) {
+            throw std::runtime_error("load_tensor_data: failed to seek to start offset");
+        }
+        const auto byte_count = static_cast<std::streamsize>(expected);
+        file.read(reinterpret_cast<char*>(buffer.data()), byte_count);
+        if (!file || file.gcount() != byte_count) {
+            throw std::runtime_error("load_tensor_data: failed to read expected f32 bytes");
+        }
+        auto* dst = tensor.data();
+        for (std::size_t i = 0; i < element_count; ++i) {
+            dst[i] = nb::BFloat16(buffer[i]);
+        }
+        return;
+    }
+
+    throw std::runtime_error("load_tensor_data: unsupported dtype " + info.dtype);
+}
+
+inline void load_tensor_data_checked(std::string_view label,
+                                     Tensor& tensor,
+                                     std::istream& file,
+                                     const TensorInfo& info) {
+    try {
+        load_tensor_data(tensor, file, info);
+    } catch (const std::exception& e) {
+        throw std::runtime_error(std::string(label) + ": " + e.what());
+    }
+}
 
 class Variable : public std::enable_shared_from_this<Variable> {
 public:
